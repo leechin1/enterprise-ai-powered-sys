@@ -1,0 +1,414 @@
+#!/usr/bin/env python3
+"""
+Main script to generate and insert fake data using Gemini API
+"""
+
+import random
+from datetime import datetime, timedelta
+from gemini_generator import GeminiDataGenerator
+from db_connector import DatabaseConnector
+from config import DATA_COUNTS
+
+
+def generate_order_items(order_ids, album_ids, db):
+    """Generate order items for each order"""
+    print("\nGenerating order items...")
+    all_items = []
+
+    for order_id in order_ids:
+        num_items = random.randint(*DATA_COUNTS['order_items_per_order'])
+        selected_albums = random.sample(album_ids, min(num_items, len(album_ids)))
+
+        for album_id in selected_albums:
+            unit_price = round(random.uniform(15.99, 149.99), 2)
+            quantity = random.randint(1, 2)
+            discount = round(random.uniform(0, unit_price * 0.2), 2) if random.random() < 0.2 else 0.00
+            total = round((unit_price * quantity) - discount, 2)
+
+            all_items.append({
+                'order_id': order_id,
+                'album_id': album_id,
+                'quantity': quantity,
+                'unit_price': unit_price,
+                'discount': discount,
+                'total': total
+            })
+
+    db.insert_order_items(all_items)
+    print(f"✓ Generated {len(all_items)} order items")
+
+
+def generate_payments(order_ids, db):
+    """Generate payments for orders"""
+    print("\nGenerating payments...")
+    all_payments = []
+
+    for order_id in order_ids:
+        # Random order total (in real scenario, would use actual order total)
+        amount = round(random.uniform(30, 500), 2)
+        payment_method = random.choice(['card', 'cash', 'bank_transfer', 'paypal'])
+        status = random.choices(
+            ['completed', 'pending', 'failed', 'refunded'],
+            weights=[0.85, 0.05, 0.05, 0.05]
+        )[0]
+        transaction_id = f"TXN-{random.randint(100000, 999999)}"
+        fraud_flagged = random.random() < 0.02
+        fraud_score = round(random.uniform(70, 100), 2) if fraud_flagged else round(random.uniform(0, 30), 2)
+
+        # Payment date close to order date
+        days_offset = random.randint(0, 2)
+        payment_date = (datetime.now() - timedelta(days=random.randint(0, 180) + days_offset)).isoformat()
+
+        all_payments.append({
+            'order_id': order_id,
+            'amount': amount,
+            'payment_method': payment_method,
+            'status': status,
+            'transaction_id': transaction_id,
+            'fraud_flagged': fraud_flagged,
+            'fraud_score': fraud_score,
+            'payment_date': payment_date
+        })
+
+    db.insert_payments(all_payments)
+    print(f"✓ Generated {len(all_payments)} payments")
+
+
+def generate_shipments(order_ids, db):
+    """Generate shipments for orders"""
+    print("\nGenerating shipments...")
+    all_shipments = []
+
+    # Only 80% of orders have shipments
+    shipped_orders = random.sample(order_ids, int(len(order_ids) * 0.8))
+
+    for order_id in shipped_orders:
+        tracking_number = f"TRK{random.randint(1000000000, 9999999999)}"
+        carrier = random.choice(['USPS', 'FedEx', 'UPS', 'DHL'])
+        status = random.choices(
+            ['delivered', 'in_transit', 'shipped', 'preparing'],
+            weights=[0.7, 0.15, 0.1, 0.05]
+        )[0]
+
+        shipped_date = (datetime.now() - timedelta(days=random.randint(1, 180))).isoformat()
+        estimated_delivery = (datetime.fromisoformat(shipped_date) + timedelta(days=random.randint(3, 7))).isoformat()
+
+        actual_delivery = None
+        if status == 'delivered':
+            actual_delivery = (datetime.fromisoformat(shipped_date) + timedelta(days=random.randint(3, 10))).isoformat()
+
+        all_shipments.append({
+            'order_id': order_id,
+            'tracking_number': tracking_number,
+            'carrier': carrier,
+            'status': status,
+            'shipped_date': shipped_date,
+            'estimated_delivery': estimated_delivery,
+            'actual_delivery': actual_delivery
+        })
+
+    db.insert_shipments(all_shipments)
+    print(f"✓ Generated {len(all_shipments)} shipments")
+
+
+def generate_reviews(customer_ids, album_ids, db):
+    """Generate product reviews"""
+    print("\nGenerating reviews...")
+    all_reviews = []
+
+    for _ in range(DATA_COUNTS['reviews']):
+        customer_id = random.choice(customer_ids)
+        album_id = random.choice(album_ids)
+        rating = random.choices([1, 2, 3, 4, 5], weights=[0.05, 0.05, 0.1, 0.3, 0.5])[0]
+
+        # Generate review text based on rating
+        if rating >= 4:
+            sentiment = 'positive'
+            sentiment_score = round(random.uniform(70, 100), 2)
+        elif rating == 3:
+            sentiment = 'neutral'
+            sentiment_score = round(random.uniform(40, 60), 2)
+        else:
+            sentiment = 'negative'
+            sentiment_score = round(random.uniform(0, 40), 2)
+
+        review_texts = {
+            5: ["Excellent album! Highly recommend.", "Amazing sound quality!", "One of the best in my collection."],
+            4: ["Great album, really enjoyed it.", "Good quality pressing.", "Worth the price."],
+            3: ["Decent album, nothing special.", "It's okay, average quality.", "Mixed feelings about this one."],
+            2: ["Not impressed, expected better.", "Quality issues with the pressing.", "Disappointing."],
+            1: ["Very poor quality.", "Would not recommend.", "Waste of money."]
+        }
+        review_text = random.choice(review_texts[rating])
+        verified_purchase = random.random() < 0.7
+
+        all_reviews.append({
+            'customer_id': customer_id,
+            'album_id': album_id,
+            'rating': rating,
+            'review_text': review_text,
+            'sentiment': sentiment,
+            'sentiment_score': sentiment_score,
+            'verified_purchase': verified_purchase
+        })
+
+    db.insert_reviews(all_reviews)
+    print(f"✓ Generated {len(all_reviews)} reviews")
+
+
+def generate_inventory(album_ids, db):
+    """Generate inventory records for albums"""
+    print("\nGenerating inventory records...")
+    all_inventory = []
+
+    for album_id in album_ids:
+        quantity = random.randint(0, 50)
+        reserved_quantity = random.randint(0, min(5, quantity))
+        reorder_point = random.randint(3, 10)
+        optimal_stock_level = random.randint(15, 30)
+        turnover_rate = round(random.uniform(0.5, 5.0), 2)
+        days_in_stock = random.randint(0, 365)
+
+        last_restock_date = None
+        if quantity > 0:
+            last_restock_date = (datetime.now() - timedelta(days=random.randint(0, 90))).isoformat()
+
+        all_inventory.append({
+            'album_id': album_id,
+            'quantity': quantity,
+            'reserved_quantity': reserved_quantity,
+            'reorder_point': reorder_point,
+            'optimal_stock_level': optimal_stock_level,
+            'turnover_rate': turnover_rate,
+            'days_in_stock': days_in_stock,
+            'last_restock_date': last_restock_date
+        })
+
+    db.insert_inventory(all_inventory)
+    print(f"✓ Generated {len(all_inventory)} inventory records")
+
+
+def generate_inventory_transactions(inventory_ids, order_ids, user_ids, db):
+    """Generate inventory transaction history"""
+    print("\nGenerating inventory transactions...")
+    all_transactions = []
+
+    # Note: This is simplified - in reality we'd query inventory table for IDs
+    for _ in range(DATA_COUNTS['inventory_transactions']):
+        inventory_id = random.choice(inventory_ids) if inventory_ids else None
+        order_id = random.choice(order_ids) if random.random() < 0.6 else None
+        transaction_type = random.choice(['restock', 'sale', 'adjustment', 'return'])
+
+        if transaction_type == 'sale':
+            quantity_change = -random.randint(1, 5)
+        elif transaction_type == 'return':
+            quantity_change = random.randint(1, 2)
+        else:
+            quantity_change = random.randint(-10, 50)
+
+        unit_price = round(random.uniform(10, 100), 2)
+        notes = random.choice([None, "Regular restock", "Customer return", "Damaged item", ""])
+        user_id = random.choice(user_ids) if random.random() < 0.7 else None
+        created_at = (datetime.now() - timedelta(days=random.randint(0, 180))).isoformat()
+
+        # Skip if inventory_id is None
+        if inventory_id:
+            all_transactions.append({
+                'inventory_id': inventory_id,
+                'order_id': order_id,
+                'transaction_type': transaction_type,
+                'quantity_change': quantity_change,
+                'unit_price': unit_price,
+                'notes': notes,
+                'user_id': user_id,
+                'created_at': created_at
+            })
+
+    if all_transactions:
+        db.insert_inventory_transactions(all_transactions)
+        print(f"✓ Generated {len(all_transactions)} inventory transactions")
+
+
+def generate_case_messages(case_ids, user_ids, db):
+    """Generate messages for cases"""
+    print("\nGenerating case messages...")
+    all_messages = []
+
+    for case_id in case_ids:
+        num_messages = random.randint(*DATA_COUNTS['case_messages_per_case'])
+
+        messages = [
+            "I have an issue with my recent order.",
+            "Can you help me with this?",
+            "Thanks for your assistance.",
+            "Let me check on that for you.",
+            "I've escalated this to our team.",
+            "This has been resolved. Thank you!",
+            "Can you provide more details?",
+            "I'm looking into this now."
+        ]
+
+        for i in range(num_messages):
+            user_id = random.choice(user_ids) if i % 2 == 1 else None
+            message = random.choice(messages)
+            is_internal = random.random() < 0.2 and user_id is not None
+            from_customer = user_id is None
+
+            all_messages.append({
+                'case_id': case_id,
+                'user_id': user_id,
+                'message': message,
+                'is_internal': is_internal,
+                'from_customer': from_customer
+            })
+
+    db.insert_case_messages(all_messages)
+    print(f"✓ Generated {len(all_messages)} case messages")
+
+
+def generate_workflow_executions(workflow_ids, db):
+    """Generate workflow execution history"""
+    print("\nGenerating workflow executions...")
+    all_executions = []
+
+    for _ in range(DATA_COUNTS['workflow_executions']):
+        workflow_id = random.choice(workflow_ids)
+        status = random.choices(
+            ['complete', 'error', 'running', 'cancelled'],
+            weights=[0.7, 0.15, 0.1, 0.05]
+        )[0]
+        description = f"Workflow execution at {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        progress_percentage = 100 if status in ['complete', 'error', 'cancelled'] else random.randint(0, 99)
+
+        start_time = (datetime.now() - timedelta(hours=random.randint(1, 720))).isoformat()
+        end_time = None
+        if status in ['complete', 'error', 'cancelled']:
+            end_time = (datetime.fromisoformat(start_time) + timedelta(minutes=random.randint(1, 30))).isoformat()
+
+        execution_log = '{"steps": [{"name": "start", "status": "complete"}]}'
+        error_message = "Error during execution" if status == 'error' else None
+        triggered_by = random.choice(['schedule', 'manual', 'api', 'webhook'])
+        metadata = '{}'
+
+        all_executions.append((
+            workflow_id, status, description, progress_percentage, start_time,
+            end_time, execution_log, error_message, triggered_by, metadata
+        ))
+
+    query = """
+    INSERT INTO workflow_executions (workflow_id, status, description, progress_percentage,
+                                    start_time, end_time, execution_log, error_message,
+                                    triggered_by, metadata)
+    VALUES %s
+    """
+    db.execute_custom(query, all_executions)
+    print(f"✓ Generated {len(all_executions)} workflow executions")
+
+
+def main():
+    """Main data generation workflow"""
+    print("=" * 60)
+    print("FAKE DATA GENERATION WITH GEMINI API")
+    print("=" * 60)
+
+    generator = GeminiDataGenerator()
+    db = DatabaseConnector()
+
+    try:
+        # Connect to database
+        db.connect()
+
+        # Generate and insert data in order (respecting foreign key constraints)
+
+        print("\n1. Generating genres...")
+        genres_data = generator.generate_genres(DATA_COUNTS['genres'])
+        genre_ids = db.insert_genres(genres_data)
+        print(f"✓ Inserted {len(genre_ids)} genres")
+
+        print("\n2. Generating labels...")
+        labels_data = generator.generate_labels(DATA_COUNTS['labels'])
+        label_ids = db.insert_labels(labels_data)
+        print(f"✓ Inserted {len(label_ids)} labels")
+
+        print("\n3. Generating users...")
+        users_data = generator.generate_users(DATA_COUNTS['users'])
+        user_ids = db.insert_users(users_data)
+        print(f"✓ Inserted {len(user_ids)} users")
+
+        print("\n4. Generating customers...")
+        customers_data = generator.generate_customers(DATA_COUNTS['customers'])
+        customer_ids = db.insert_customers(customers_data)
+        print(f"✓ Inserted {len(customer_ids)} customers")
+
+        print("\n5. Generating albums...")
+        albums_data = generator.generate_albums(DATA_COUNTS['albums'], genre_ids, label_ids)
+        album_ids = db.insert_albums(albums_data)
+        print(f"✓ Inserted {len(album_ids)} albums")
+
+        print("\n6. Generating inventory...")
+        generate_inventory(album_ids, db)
+
+        print("\n7. Generating orders...")
+        orders_data = generator.generate_orders(DATA_COUNTS['orders'], customer_ids)
+        order_ids = db.insert_orders(orders_data)
+        print(f"✓ Inserted {len(order_ids)} orders")
+
+        print("\n8. Generating order items...")
+        generate_order_items(order_ids, album_ids, db)
+
+        print("\n9. Generating payments...")
+        generate_payments(order_ids, db)
+
+        print("\n10. Generating shipments...")
+        generate_shipments(order_ids, db)
+
+        print("\n11. Generating reviews...")
+        generate_reviews(customer_ids, album_ids, db)
+
+        # For inventory transactions, we'd need to query inventory IDs
+        # Simplified version here
+        print("\n12. Generating inventory transactions...")
+        # Using album_ids as proxy for inventory_ids (1:1 relationship)
+        generate_inventory_transactions(album_ids, order_ids, user_ids, db)
+
+        print("\n13. Generating cases...")
+        cases_data = generator.generate_cases(DATA_COUNTS['cases'], customer_ids, user_ids)
+        case_ids = db.insert_cases(cases_data)
+        print(f"✓ Inserted {len(case_ids)} cases")
+
+        print("\n14. Generating case messages...")
+        generate_case_messages(case_ids, user_ids, db)
+
+        print("\n15. Generating workflows...")
+        workflows_data = generator.generate_workflows(DATA_COUNTS['workflows'])
+        workflow_ids = db.insert_workflows(workflows_data)
+        print(f"✓ Inserted {len(workflow_ids)} workflows")
+
+        print("\n16. Generating workflow executions...")
+        generate_workflow_executions(workflow_ids, db)
+
+        print("\n17. Generating integrations...")
+        integrations_data = generator.generate_integrations(DATA_COUNTS['integrations'])
+        integration_ids = db.insert_integrations(integrations_data)
+        print(f"✓ Inserted {len(integration_ids)} integrations")
+
+        print("\n18. Generating system logs...")
+        logs_data = generator.generate_system_logs(DATA_COUNTS['system_logs'], user_ids)
+        db.insert_system_logs(logs_data)
+        print(f"✓ Inserted {DATA_COUNTS['system_logs']} system logs")
+
+        print("\n" + "=" * 60)
+        print("✓ DATA GENERATION COMPLETED SUCCESSFULLY!")
+        print("=" * 60)
+
+    except Exception as e:
+        print(f"\n✗ Error during data generation: {e}")
+        import traceback
+        traceback.print_exc()
+
+    finally:
+        db.close()
+
+
+if __name__ == '__main__':
+    main()
