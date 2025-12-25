@@ -10,9 +10,17 @@ import streamlit as st
 from frontend.styles import CUSTOM_CSS
 from frontend.components import dashboard, knowledge, analytics, inventory, cases, activity, configuration
 
+
+# Logo setup
+
+st.logo(
+    "assets/logo.png",
+    size="large"
+)
+
 # Page configuration
 st.set_page_config(
-    page_title="Misty AI Enterprise System",
+    page_title="Misty- AI Enterprise System",
     page_icon="🎵",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -56,10 +64,10 @@ with st.sidebar:
         st.session_state.page = 'analytics'
         st.rerun()
 
-    # Activity
-    if st.button("⚡ Activity", use_container_width=True, type="primary" if st.session_state.page == 'activity' else "secondary"):
-        st.session_state.page = 'activity'
-        st.rerun()
+    # Activity - Redacted for now
+    #if st.button("⚡ Activity", use_container_width=True, type="primary" if st.session_state.page == 'activity' else "secondary"):
+    #    st.session_state.page = 'activity'
+    #    st.rerun()
 
     # Cases
     if st.button("📋 Cases", use_container_width=True, type="primary" if st.session_state.page == 'cases' else "secondary"):

@@ -1,0 +1,267 @@
+"""
+Gemini API integration for generating realistic fake data
+"""
+
+import os
+import json
+import time
+from typing import List, Dict, Any
+from google import genai
+from google.genai import types
+from dotenv import load_dotenv
+from config import GEMINI_MODEL, GEMINI_TEMPERATURE, GEMINI_MAX_RETRIES
+
+# Load environment variables
+load_dotenv()
+
+
+class GeminiDataGenerator:
+    """Generate realistic fake data using Gemini API"""
+
+    def __init__(self):
+        self.client = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
+        self.generation_config = types.GenerateContentConfig(
+            temperature=GEMINI_TEMPERATURE,
+            top_p=0.95,
+            top_k=40,
+        )
+
+    def generate_data(self, prompt: str, count: int, retry: int = 0) -> List[Dict[str, Any]]:
+        """
+        Generate fake data using Gemini API
+
+        Args:
+            prompt: Instruction for what data to generate
+            count: Number of records to generate
+            retry: Current retry attempt
+
+        Returns:
+            List of dictionaries containing generated data
+        """
+        try:
+            full_prompt = f"""
+{prompt}
+
+Generate exactly {count} records in valid JSON format.
+Return ONLY a JSON array of objects, no markdown, no explanations, no code blocks.
+Ensure all JSON is properly formatted and valid.
+
+Example format:
+[
+  {{"field1": "value1", "field2": "value2"}},
+  {{"field1": "value3", "field2": "value4"}}
+]
+"""
+
+            response = self.client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=full_prompt,
+                config=self.generation_config
+            )
+
+            # Extract JSON from response
+            text = response.text.strip()
+
+            # Remove markdown code blocks if present
+            if text.startswith('```'):
+                lines = text.split('\n')
+                text = '\n'.join(lines[1:-1])
+                if text.startswith('json'):
+                    text = text[4:].strip()
+
+            # Parse JSON
+            data = json.loads(text)
+
+            if not isinstance(data, list):
+                raise ValueError("Response is not a JSON array")
+
+            print(f" Generated {len(data)} records")
+            return data
+
+        except Exception as e:
+            if retry < GEMINI_MAX_RETRIES:
+                print(f" Error generating data (attempt {retry + 1}/{GEMINI_MAX_RETRIES}): {e}")
+                time.sleep(2 ** retry)  # Exponential backoff
+                return self.generate_data(prompt, count, retry + 1)
+            else:
+                print(f" Failed to generate data after {GEMINI_MAX_RETRIES} attempts: {e}")
+                return []
+
+    def generate_genres(self, count: int) -> List[Dict]:
+        """Generate music genres"""
+        prompt = """
+Generate a diverse list of music genres for a jazz vinyl record store.
+Each genre should have:
+- name: unique genre name (string)
+- description: brief description of the genre (string, 50-150 chars)
+- avg_margin: average profit margin percentage (decimal, 25.0-45.0)
+- popularity_score: popularity rating (integer, 50-100)
+
+Include classic jazz genres (Bebop, Cool Jazz, Hard Bop, Modal Jazz, Free Jazz)
+and contemporary sub-genres.
+"""
+        return self.generate_data(prompt, count)
+
+    def generate_labels(self, count: int) -> List[Dict]:
+        """Generate record labels"""
+        prompt = """
+Generate a list of record labels (both real historical labels and fictional ones).
+Each label should have:
+- name: label name (string)
+- country: country of origin (string, e.g., "USA", "UK", "Germany", "Japan", "France")
+- founded_year: year founded (integer, 1940-2020)
+
+Include famous jazz labels like Blue Note, Verve, Columbia, ECM, Impulse!,
+and also create some fictional labels with realistic names.
+"""
+        return self.generate_data(prompt, count)
+
+    def generate_users(self, count: int) -> List[Dict]:
+        """Generate system users"""
+        prompt = """
+Generate system users for a vinyl record store management system.
+Each user should have:
+- email: professional email address (string, use @mistyjazz.com domain)
+- first_name: first name (string)
+- last_name: last name (string)
+- role: one of ["admin", "manager", "staff"] (string, mostly staff, some managers, 1 admin)
+
+Create realistic employee names and emails.
+"""
+        return self.generate_data(prompt, count)
+
+    def generate_customers(self, count: int) -> List[Dict]:
+        """Generate customers"""
+        prompt = """
+Generate customer profiles for a jazz vinyl record store.
+Each customer should have:
+- email: unique email address (string)
+- first_name: first name (string)
+- last_name: last name (string)
+- phone: phone number in format (XXX) XXX-XXXX (string)
+- address: full street address (string)
+- date_joined: join date in YYYY-MM-DD format (string, random dates in last 3 years)
+- lifetime_value: total spent (decimal, 0.00-5000.00)
+- total_purchases: number of purchases (integer, 0-50)
+- preferred_genre: favorite genre or null (string or null)
+- status: one of ["active", "inactive", "vip"] (string, mostly active)
+
+Create diverse, realistic customer data.
+"""
+        return self.generate_data(prompt, count)
+
+    def generate_albums(self, count: int, genre_ids: List[str], label_ids: List[str]) -> List[Dict]:
+        """Generate albums with references to genres and labels"""
+        prompt = f"""
+Generate jazz vinyl album records for a record store.
+Each album should have:
+- sku: unique SKU code (string, format: "VNL-XXXXX" where X is digit)
+- title: album title (string, realistic jazz album names)
+- artist: artist/band name (string, can be real or fictional jazz artists)
+- genre_id: UUID from this list: {genre_ids[:5]} (randomly select)
+- label_id: UUID from this list: {label_ids[:5]} (randomly select)
+- release_year: year released (integer, 1950-2023)
+- price: retail price (decimal, 15.99-299.99, rare albums more expensive)
+- cost: wholesale cost (decimal, 60-70% of price)
+- condition: one of ["M", "NM", "VG+", "VG", "G+"] (string, mostly NM and VG+)
+- description: brief album description (string, 100-200 chars)
+- is_rare: whether it's a collectible (boolean, 20% true)
+- estimated_value: market value for rare items or null (decimal or null, higher for rare)
+
+Create a mix of classic and contemporary jazz albums.
+"""
+        return self.generate_data(prompt, count)
+
+    def generate_orders(self, count: int, customer_ids: List[str]) -> List[Dict]:
+        """Generate orders"""
+        prompt = f"""
+Generate customer orders for a vinyl record store.
+Each order should have:
+- order_number: unique order number (string, format: "ORD-XXXXXX")
+- customer_id: UUID from this list: {customer_ids[:10]} (randomly select)
+- subtotal: order subtotal (decimal, 20.00-500.00)
+- tax: sales tax amount (decimal, 8% of subtotal)
+- shipping_fee: shipping cost (decimal, 0.00-25.00)
+- total: subtotal + tax + shipping_fee (decimal)
+- status: one of ["pending", "processing", "shipped", "delivered", "cancelled"] (string)
+- channel: one of ["in-store", "online", "phone"] (string)
+- shipping_address: full address or null for in-store (string or null)
+- order_date: date in YYYY-MM-DD HH:MM:SS format (string, last 6 months)
+
+Create realistic order data with proper calculations.
+"""
+        return self.generate_data(prompt, count)
+
+    def generate_cases(self, count: int, customer_ids: List[str], user_ids: List[str]) -> List[Dict]:
+        """Generate customer service cases"""
+        prompt = f"""
+Generate customer service tickets for a vinyl record store.
+Each case should have:
+- customer_id: UUID from this list: {customer_ids[:10]} (randomly select)
+- subject: brief issue description (string, 50-100 chars)
+- description: detailed problem description (string, 100-300 chars)
+- category: one of ["order_issue", "product_question", "return", "technical", "general", "complaint", "feedback"] (string)
+- priority: one of ["critical", "high", "medium", "low"] (string, mostly medium/low)
+- status: one of ["pending", "in_progress", "resolved", "closed"] (string)
+- assigned_to: UUID from this list: {user_ids[:5]} or null (string or null)
+- ai_sentiment: one of ["happy", "neutral", "frustrated", "angry", "confused"] (string)
+- ai_score: urgency score (integer, 0-100)
+- ai_suggestion: AI recommendation for resolution (string, 100-200 chars)
+- resolution_notes: resolution summary or null if not resolved (string or null)
+- created_at: timestamp in YYYY-MM-DD HH:MM:SS format (string, last 3 months)
+- resolved_at: resolution timestamp or null (string or null)
+
+Create realistic customer service scenarios.
+"""
+        return self.generate_data(prompt, count)
+
+    def generate_workflows(self, count: int) -> List[Dict]:
+        """Generate workflow definitions"""
+        prompt = """
+Generate automated workflow configurations for a business automation system.
+Each workflow should have:
+- name: workflow name (string, descriptive)
+- description: what the workflow does (string, 100-200 chars)
+- trigger_type: one of ["schedule", "event", "manual", "api"] (string)
+- trigger_config: JSON object with trigger settings (object, use cron for schedule, event name for event)
+- workflow_definition: JSON object with steps array (object, include step names)
+- enabled: whether active (boolean, mostly true)
+
+Create workflows like inventory sync, order processing, customer notifications, etc.
+Example trigger_config: {"cron": "0 * * * *"} or {"event": "order.created"}
+Example workflow_definition: {"steps": ["validate", "process", "notify"]}
+"""
+        return self.generate_data(prompt, count)
+
+    def generate_integrations(self, count: int) -> List[Dict]:
+        """Generate third-party integrations"""
+        prompt = """
+Generate third-party service integration configurations.
+Each integration should have:
+- service_name: service name (string, e.g., "Stripe", "Shopify", "SendGrid")
+- category: one of ["payment", "ecommerce", "email", "analytics", "shipping", "accounting"] (string)
+- connected: connection status (boolean)
+- settings: JSON object with service settings (object, relevant to category)
+- sync_frequency: how often to sync (string, e.g., "hourly", "daily", "realtime")
+- error_count: number of recent errors (integer, 0-10)
+- last_error: error message or null (string or null)
+
+Create realistic integration services for an e-commerce business.
+"""
+        return self.generate_data(prompt, count)
+
+    def generate_system_logs(self, count: int, user_ids: List[str]) -> List[Dict]:
+        """Generate system logs"""
+        prompt = f"""
+Generate system log entries for monitoring and debugging.
+Each log should have:
+- log_level: one of ["debug", "info", "warning", "error", "critical"] (string)
+- source: system component (string, e.g., "api", "workflow_engine", "auth", "database")
+- message: log message (string, 50-200 chars)
+- metadata: JSON object with additional context (object, optional)
+- user_id: UUID from this list: {user_ids[:5]} or null (string or null)
+- created_at: timestamp in YYYY-MM-DD HH:MM:SS format (string, last 7 days)
+
+Create realistic system logs with various levels and sources.
+"""
+        return self.generate_data(prompt, count)

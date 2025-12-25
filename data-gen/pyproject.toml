@@ -1,7 +1,10 @@
 [project]
 name = "data-gen"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
+description = "Some data generation scripts to be eventually stored in supabase for further analysis, resorting to Gemini."
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "google-genai>=1.2.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+]

@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 
 # Load environment variables
-load_dotenv(dotenv_path='../.env')
+load_dotenv()
 
 
 class DatabaseConnector:
@@ -21,12 +21,12 @@ class DatabaseConnector:
         """Connect to Supabase using the client library"""
         try:
             supabase_url = os.getenv('SUPABASE_URL')
-            supabase_key = os.getenv('SUPABASE_PUBLISHABLE_KEY')
+            supabase_key = os.getenv('SUPABASE_SECRET_KEY')
 
             if not supabase_url or not supabase_key:
-                raise ValueError("SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY must be set in .env file")
+                raise ValueError("SUPABASE_URL and SUPABASE_SECRET_KEY must be set in .env file")
 
-            # Create Supabase client
+            # Create Supabase client with service role key for server-side operations
             self.client = create_client(supabase_url, supabase_key)
             print("✓ Connected to Supabase successfully")
 
