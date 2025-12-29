@@ -3,7 +3,7 @@ Database connection and data insertion utilities
 """
 
 import os
-from typing import List, Dict, Any
+from typing import List, Dict
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
@@ -28,16 +28,16 @@ class DatabaseConnector:
 
             # Create Supabase client with service role key for server-side operations
             self.client = create_client(supabase_url, supabase_key)
-            print("✓ Connected to Supabase successfully")
+            print("Connected to Supabase successfully")
 
         except Exception as e:
-            print(f"✗ Failed to connect to Supabase: {e}")
+            print(f"Failed to connect to Supabase: {e}")
             raise
 
     def close(self):
         """Close database connection"""
         # Supabase client doesn't need explicit closing
-        print("✓ Database connection closed")
+        print("Database connection closed")
 
     def insert_genres(self, data: List[Dict]) -> List[str]:
         """Insert genres and return UUIDs"""
@@ -48,11 +48,6 @@ class DatabaseConnector:
         """Insert labels and return UUIDs"""
         result = self.client.table('labels').insert(data).execute()
         return [row['label_id'] for row in result.data]
-
-    def insert_users(self, data: List[Dict]) -> List[str]:
-        """Insert users and return UUIDs"""
-        result = self.client.table('users').insert(data).execute()
-        return [row['user_id'] for row in result.data]
 
     def insert_customers(self, data: List[Dict]) -> List[str]:
         """Insert customers and return UUIDs"""
@@ -82,26 +77,13 @@ class DatabaseConnector:
         """Insert payments"""
         self.client.table('payments').insert(data).execute()
 
-    def insert_shipments(self, data: List[Dict]):
-        """Insert shipments"""
-        self.client.table('shipments').insert(data).execute()
-
     def insert_reviews(self, data: List[Dict]):
         """Insert reviews"""
         self.client.table('reviews').insert(data).execute()
 
-    def insert_inventory_transactions(self, data: List[Dict]):
-        """Insert inventory transactions"""
-        self.client.table('inventory_transactions').insert(data).execute()
-
-    def insert_cases(self, data: List[Dict]) -> List[str]:
-        """Insert cases and return UUIDs"""
-        result = self.client.table('cases').insert(data).execute()
-        return [row['case_id'] for row in result.data]
-
-    def insert_case_messages(self, data: List[Dict]):
-        """Insert case messages"""
-        self.client.table('case_messages').insert(data).execute()
+    def insert_sales(self, data: List[Dict]):
+        """Insert sales transactions (renamed from inventory_transactions)"""
+        self.client.table('sales').insert(data).execute()
 
     def insert_workflows(self, data: List[Dict]) -> List[str]:
         """Insert workflows and return UUIDs"""
@@ -111,12 +93,3 @@ class DatabaseConnector:
     def insert_workflow_executions(self, data: List[Dict]):
         """Insert workflow executions"""
         self.client.table('workflow_executions').insert(data).execute()
-
-    def insert_integrations(self, data: List[Dict]) -> List[str]:
-        """Insert integrations and return UUIDs"""
-        result = self.client.table('integrations').insert(data).execute()
-        return [row['integration_id'] for row in result.data]
-
-    def insert_system_logs(self, data: List[Dict]):
-        """Insert system logs"""
-        self.client.table('system_logs').insert(data).execute()

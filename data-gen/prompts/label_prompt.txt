@@ -1,0 +1,11 @@
+Generate a list of record labels (both real historical labels and fictional ones).
+Include famous jazz labels like Blue Note, Verve, Columbia, ECM, Impulse!,
+and also create some fictional labels with realistic names.
+
+Field constraints:
+- name: label name (string)
+
+Additional requirements:
+- Maintain exact field names from schema
+- Infer appropriate realistic values from context
+- Ensure data types match schema

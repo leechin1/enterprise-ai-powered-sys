@@ -1,0 +1,11 @@
+Generate a diverse list of music genres for a jazz vinyl record store.
+Include classic jazz genres (Bebop, Cool Jazz, Hard Bop, Modal Jazz, Free Jazz)
+and contemporary sub-genres.
+
+Field constraints:
+- name: unique genre name (string)
+
+Additional requirements:
+- Maintain exact field names from schema
+- Infer appropriate realistic values from context
+- Ensure data types match schema

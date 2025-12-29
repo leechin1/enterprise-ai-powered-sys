@@ -1,0 +1,14 @@
+Generate jazz vinyl album records for a record store.
+Create a mix of classic and contemporary jazz albums.
+
+Field constraints:
+- title: album title, realistic jazz album names (string)
+- artist: artist/band name, can be real or fictional jazz artists (string)
+- genre_id: UUID from reference list (string)
+- label_id: UUID from reference list (string)
+- price: retail price, range 15.99-299.99, rare albums more expensive (float)
+
+Additional requirements:
+- Maintain exact field names from schema
+- Infer appropriate realistic values from context
+- Ensure data types match schema

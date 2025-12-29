@@ -1,0 +1,13 @@
+Generate customer profiles for a jazz vinyl record store.
+Create diverse, realistic customer data.
+
+Field constraints:
+- email: unique email address (string)
+- first_name: first name (string)
+- last_name: last name (string)
+- phone: phone number in format (XXX) XXX-XXXX (string)
+
+Additional requirements:
+- Maintain exact field names from schema
+- Infer appropriate realistic values from context
+- Ensure data types match schema

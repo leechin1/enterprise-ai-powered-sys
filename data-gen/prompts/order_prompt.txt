@@ -1,0 +1,15 @@
+Generate customer orders for a vinyl record store.
+Create realistic order data.
+
+Field constraints:
+- order_number: unique order number, format "ORD-XXXXXX" (string)
+- customer_id: UUID from reference list (string)
+- total: order total, range 20.00-500.00 (float)
+- shipping_address: full address or null for in-store (string or null)
+- order_date: date in YYYY-MM-DD HH:MM:SS format, last 6 months (string)
+
+Additional requirements:
+- Use null for optional/missing information
+- Maintain exact field names from schema
+- Infer appropriate realistic values from context
+- Ensure data types match schema

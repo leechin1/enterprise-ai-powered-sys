@@ -5,6 +5,7 @@ description = "Some data generation scripts to be eventually stored in supabase 
 requires-python = ">=3.13"
 dependencies = [
     "google-genai>=1.2.0",
+    "langfuse>=3.11.2",
     "pydantic>=2.0.0",
     "python-dotenv>=1.0.0",
 ]

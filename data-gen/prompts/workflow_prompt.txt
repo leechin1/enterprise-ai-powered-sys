@@ -1,0 +1,18 @@
+Generate automated workflow configurations for a business automation system.
+Create workflows like inventory sync, order processing, customer notifications, etc.
+
+Field constraints:
+- name: workflow name, descriptive (string)
+- description: what the workflow does, 100-200 characters (string)
+- trigger_type: one of ["schedule", "event", "manual", "api"] (string)
+- trigger_config: JSON object with trigger settings, use cron for schedule, event name for event (object)
+  Example: {"cron": "0 * * * *"} or {"event": "order.created"}
+- workflow_definition: JSON object with steps array, include step names (object)
+  Example: {"steps": ["validate", "process", "notify"]}
+- enabled: whether active, mostly true (boolean)
+
+Additional requirements:
+- Use null for optional/missing information
+- Maintain exact field names from schema
+- Infer appropriate realistic values from context
+- Ensure data types match schema
