@@ -9,19 +9,13 @@ ALTER TABLE labels ENABLE ROW LEVEL SECURITY;
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE albums ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory ENABLE ROW LEVEL SECURITY;
-ALTER TABLE inventory_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE shipments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE cases ENABLE ROW LEVEL SECURITY;
-ALTER TABLE case_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE workflows ENABLE ROW LEVEL SECURITY;
 ALTER TABLE workflow_executions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE system_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE integrations ENABLE ROW LEVEL SECURITY;
 
 -- HELPER FUNCTIONS
 
@@ -226,67 +220,6 @@ CREATE POLICY "Admin can manage all reviews"
     FOR ALL
     USING (auth_role() = 'admin');
 
--- CASES POLICIES
-
--- Customers can view their own cases
-CREATE POLICY "Customers can view own cases"
-    ON cases
-    FOR SELECT
-    USING (customer_id = auth_uid() OR auth_role() IN ('admin', 'manager', 'staff'));
-
--- Customers can create cases
-CREATE POLICY "Customers can create cases"
-    ON cases
-    FOR INSERT
-    WITH CHECK (customer_id = auth_uid() OR auth_role() IN ('admin', 'manager', 'staff'));
-
--- Customers can update their own cases (status changes)
-CREATE POLICY "Customers can update own cases"
-    ON cases
-    FOR UPDATE
-    USING (customer_id = auth_uid())
-    WITH CHECK (customer_id = auth_uid());
-
--- Staff can manage all cases
-CREATE POLICY "Staff can manage cases"
-    ON cases
-    FOR ALL
-    USING (auth_role() IN ('admin', 'manager', 'staff'));
-
--- CASE MESSAGES POLICIES
-
--- Customers can view messages in their cases
-CREATE POLICY "Customers can view own case messages"
-    ON case_messages
-    FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM cases
-            WHERE cases.case_id = case_messages.case_id
-            AND (cases.customer_id = auth_uid() OR auth_role() IN ('admin', 'manager', 'staff'))
-        )
-        AND (is_internal = FALSE OR auth_role() IN ('admin', 'manager', 'staff'))
-    );
-
--- Customers can add messages to their cases
-CREATE POLICY "Customers can create case messages"
-    ON case_messages
-    FOR INSERT
-    WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM cases
-            WHERE cases.case_id = case_messages.case_id
-            AND cases.customer_id = auth_uid()
-        )
-        OR auth_role() IN ('admin', 'manager', 'staff')
-    );
-
--- Staff can manage all case messages
-CREATE POLICY "Staff can manage case messages"
-    ON case_messages
-    FOR ALL
-    USING (auth_role() IN ('admin', 'manager', 'staff'));
-
 -- WORKFLOWS POLICIES
 
 -- Staff can view workflows
@@ -315,97 +248,19 @@ CREATE POLICY "System can manage workflow executions"
     FOR ALL
     USING (auth_role() IN ('admin', 'system'));
 
--- INVENTORY TRANSACTIONS POLICIES
+-- SALES POLICIES
 
--- Staff can view inventory transactions
-CREATE POLICY "Staff can view inventory transactions"
-    ON inventory_transactions
+-- Staff can view sales transactions
+CREATE POLICY "Staff can view sales"
+    ON sales
     FOR SELECT
     USING (auth_role() IN ('admin', 'manager', 'staff', 'system'));
 
--- Manager/admin can manage inventory transactions
-CREATE POLICY "Managers can manage inventory transactions"
-    ON inventory_transactions
+-- Manager/admin can manage sales transactions
+CREATE POLICY "Managers can manage sales"
+    ON sales
     FOR ALL
     USING (auth_role() IN ('admin', 'manager', 'system'));
-
--- SHIPMENTS POLICIES
-
--- Customers can view their order shipments
-CREATE POLICY "Customers can view own shipments"
-    ON shipments
-    FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM orders
-            WHERE orders.order_id = shipments.order_id
-            AND (orders.customer_id = auth_uid() OR auth_role() IN ('admin', 'manager', 'staff'))
-        )
-    );
-
--- Staff can manage shipments
-CREATE POLICY "Staff can manage shipments"
-    ON shipments
-    FOR ALL
-    USING (auth_role() IN ('admin', 'manager', 'staff'));
-
--- SYSTEM LOGS POLICIES
-
--- Admin can view system logs
-CREATE POLICY "Admin can view system logs"
-    ON system_logs
-    FOR SELECT
-    USING (auth_role() IN ('admin', 'system'));
-
--- System can insert logs
-CREATE POLICY "System can insert logs"
-    ON system_logs
-    FOR INSERT
-    WITH CHECK (auth_role() IN ('admin', 'system'));
-
--- INTEGRATIONS POLICIES
-
--- Admin can view integrations
-CREATE POLICY "Admin can view integrations"
-    ON integrations
-    FOR SELECT
-    USING (auth_role() IN ('admin', 'system'));
-
--- Admin can manage integrations
-CREATE POLICY "Admin can manage integrations"
-    ON integrations
-    FOR ALL
-    USING (auth_role() IN ('admin', 'system'));
-
--- USERS POLICIES
-
--- Users can view their own profile
-CREATE POLICY "Users can view own profile"
-    ON users
-    FOR SELECT
-    USING (user_id = auth_uid() OR auth_role() IN ('admin', 'manager'));
-
--- Users can update their own profile
-CREATE POLICY "Users can update own profile"
-    ON users
-    FOR UPDATE
-    USING (user_id = auth_uid())
-    WITH CHECK (user_id = auth_uid());
-
--- Admin can manage all users
-CREATE POLICY "Admin can manage users"
-    ON users
-    FOR ALL
-    USING (auth_role() = 'admin');
-
--- PUBLIC TABLES (No RLS needed)
-
--- These tables are public read-only:
--- - genres
--- - labels
-
-GRANT SELECT ON genres TO anon, authenticated;
-GRANT SELECT ON labels TO anon, authenticated;
 
 -- GRANT PERMISSIONS
 
@@ -421,11 +276,7 @@ GRANT SELECT ON albums, genres, labels TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON orders TO authenticated;
 GRANT SELECT, INSERT ON order_items TO authenticated;
 GRANT SELECT ON payments TO authenticated;
-GRANT SELECT ON shipments TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON reviews TO authenticated;
-GRANT SELECT, INSERT, UPDATE ON cases TO authenticated;
-GRANT SELECT, INSERT ON case_messages TO authenticated;
-GRANT SELECT, UPDATE ON users TO authenticated;
 
 -- Service role (backend/system)
 GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;

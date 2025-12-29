@@ -1,2 +1,4 @@
 .env
 steps.txt
+**/__pycache__/
+

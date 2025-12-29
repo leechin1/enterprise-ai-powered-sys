@@ -98,17 +98,6 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # System status
-    st.markdown("### System Status")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.metric("AI Status", "🟢 Active", "")
-
-    with col2:
-        st.metric("Uptime", "99.9%", "")
-
     # Version info
     st.caption("Version 1.0.0")
     st.caption("© 2024 Misty Jazz Records")
