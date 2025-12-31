@@ -6,318 +6,297 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime, timedelta
-import random
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+from utils.db_analytics import AnalyticsConnector
 
 def render_analytics():
-    """Render comprehensive analytics dashboards"""
+    """Render comprehensive analytics dashboards with REAL data from Supabase"""
 
     st.title("Analytics & Insights")
-    st.caption("AI-powered business intelligence and predictive analytics")
+    st.caption("Real-time business intelligence from your Supabase database")
 
-    # Time range selector
-    col1, col2, col3 = st.columns([2, 2, 1])
+    # Initialize analytics connector
+    try:
+        analytics = AnalyticsConnector()
+    except Exception as e:
+        st.error(f"Failed to connect to database: {e}")
+        st.info("Make sure your .env file has SUPABASE_URL and SUPABASE_SECRET_KEY set correctly.")
+        return
 
-    with col1:
-        date_range = st.selectbox(
-            "Time Period",
-            ["Last 7 Days", "Last 30 Days", "Last 90 Days", "Last Year", "All Time"]
-        )
-
-    with col2:
-        metric_type = st.selectbox(
-            "Metric Type",
-            ["Revenue", "Units Sold", "Customer Activity", "Inventory Turnover"]
-        )
+    # Refresh button
+    col1, col2, col3 = st.columns([4, 1, 1])
 
     with col3:
         if st.button("🔄 Refresh", use_container_width=True):
+            st.cache_data.clear()
             st.rerun()
 
     st.markdown("---")
 
-    # Key metrics
+    # Key metrics - REAL DATA
     col1, col2, col3, col4 = st.columns(4)
 
+    total_revenue = analytics.get_total_revenue()
+    total_orders = analytics.get_total_orders()
+    total_customers = analytics.get_total_customers()
+    avg_order_value = analytics.get_average_order_value()
+
     with col1:
-        st.metric("Total Revenue", "$124,580", "+12.5%")
+        st.metric("Total Revenue", f"${total_revenue:,.2f}")
 
     with col2:
-        st.metric("Units Sold", "2,847", "+8.3%")
+        st.metric("Total Orders", f"{total_orders:,}")
 
     with col3:
-        st.metric("Avg Order Value", "$43.75", "+3.2%")
+        st.metric("Avg Order Value", f"${avg_order_value:,.2f}")
 
     with col4:
-        st.metric("Customer LTV", "$287", "+15.8%")
+        st.metric("Total Customers", f"{total_customers:,}")
 
     st.markdown("---")
 
     # Tabs for different analytics views
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
         "📈 Sales Trends",
         "👥 Customer Insights",
         "📦 Inventory Analysis",
-        "🎯 AI Predictions",
-        "🎵 Genre Performance"
+        "🎵 Genre Performance",
     ])
 
     with tab1:
-        render_sales_trends()
+        render_sales_trends(analytics)
 
     with tab2:
-        render_customer_insights()
+        render_customer_insights(analytics)
 
     with tab3:
-        render_inventory_analysis()
+        render_inventory_analysis(analytics)
 
     with tab4:
-        render_ai_predictions()
-
-    with tab5:
-        render_genre_performance()
+        render_genre_performance(analytics)
 
 
-def render_sales_trends():
-    """Sales trends visualization"""
+def render_sales_trends(analytics: AnalyticsConnector):
+    """Sales trends visualization - REAL DATA"""
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Daily Revenue Trend")
+        st.subheader("Revenue by Order Date")
 
-        # Generate sample data
-        dates = pd.date_range(end=datetime.now(), periods=30, freq='D')
-        revenue = [random.randint(3000, 8000) for _ in range(30)]
+        # Get real daily revenue data
+        daily_data = analytics.get_orders_by_date()
 
-        df = pd.DataFrame({'Date': dates, 'Revenue': revenue})
+        if not daily_data.empty:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=daily_data['date'],
+                y=daily_data['revenue'],
+                mode='lines+markers',
+                name='Revenue',
+                line=dict(color='#6366F1', width=3),
+                marker=dict(size=8),
+                fill='tozeroy',
+                fillcolor='rgba(99, 102, 241, 0.1)',
+                text=[f"${r:,.2f}" for r in daily_data['revenue']],
+                hovertemplate='<b>%{x}</b><br>Revenue: %{text}<extra></extra>'
+            ))
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=df['Date'],
-            y=df['Revenue'],
-            mode='lines+markers',
-            name='Revenue',
-            line=dict(color='#6366F1', width=3),
-            marker=dict(size=6),
-            fill='tozeroy',
-            fillcolor='rgba(99, 102, 241, 0.1)'
-        ))
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#F1F5F9',
+                height=300,
+                margin=dict(l=0, r=0, t=20, b=0),
+                xaxis=dict(showgrid=False, title='Date'),
+                yaxis=dict(showgrid=True, gridcolor='#334155', title='Revenue ($)')
+            )
 
-        fig.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='#F1F5F9',
-            height=300,
-            margin=dict(l=0, r=0, t=20, b=0),
-            xaxis=dict(showgrid=False),
-            yaxis=dict(showgrid=True, gridcolor='#334155', title='Revenue ($)')
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No sales data available yet")
 
     with col2:
-        st.subheader("Sales by Channel")
+        st.subheader("Payment Methods Distribution")
 
-        channels = ['In-Store', 'Online', 'Phone Orders', 'Corporate']
-        values = [45, 35, 12, 8]
+        # Get real payment method data
+        payment_data = analytics.get_payment_method_distribution()
 
-        fig = go.Figure(data=[go.Pie(
-            labels=channels,
-            values=values,
-            hole=0.4,
-            marker=dict(colors=['#6366F1', '#8B5CF6', '#3B82F6', '#10B981'])
-        )])
+        if not payment_data.empty:
+            fig = go.Figure(data=[go.Pie(
+                labels=payment_data['payment_method'],
+                values=payment_data['count'],
+                hole=0.4,
+                marker=dict(colors=['#6366F1', '#8B5CF6', '#3B82F6', '#10B981']),
+                text=[f"{m.title()}<br>${a:,.2f}" for m, a in zip(payment_data['payment_method'], payment_data['total_amount'])],
+                hovertemplate='<b>%{label}</b><br>Count: %{value}<br><extra></extra>'
+            )])
 
-        fig.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='#F1F5F9',
-            height=300,
-            margin=dict(l=0, r=0, t=20, b=0),
-            showlegend=True
-        )
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#F1F5F9',
+                height=300,
+                margin=dict(l=0, r=0, t=20, b=0)
+            )
 
-        st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No payment data available yet")
 
-    # Sales by hour heatmap
-    st.subheader("Sales Heatmap by Day & Hour")
+    # Top Selling Albums
+    st.subheader("🏆 Top Selling Albums")
 
-    # Generate sample heatmap data
-    days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-    hours = list(range(9, 21))  # 9 AM to 9 PM
+    top_albums = analytics.get_top_selling_albums(limit=10)
 
-    data = [[random.randint(10, 100) for _ in hours] for _ in days]
-
-    fig = go.Figure(data=go.Heatmap(
-        z=data,
-        x=hours,
-        y=days,
-        colorscale='Purples',
-        text=data,
-        texttemplate='%{text}',
-        textfont={"size": 10}
-    ))
-
-    fig.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font_color='#F1F5F9',
-        height=300,
-        xaxis=dict(title='Hour of Day'),
-        yaxis=dict(title='Day of Week')
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def render_customer_insights():
-    """Customer analytics and segmentation"""
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("Customer Segmentation")
-
-        segments = {
-            'VIP Collectors': 145,
-            'Regular Enthusiasts': 423,
-            'Casual Buyers': 892,
-            'New Customers': 234
-        }
-
+    if not top_albums.empty:
         fig = go.Figure(data=[go.Bar(
-            x=list(segments.keys()),
-            y=list(segments.values()),
-            marker_color=['#6366F1', '#8B5CF6', '#3B82F6', '#10B981'],
-            text=list(segments.values()),
-            textposition='outside'
-        )])
-
-        fig.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='#F1F5F9',
-            height=300,
-            margin=dict(l=0, r=0, t=20, b=0),
-            xaxis=dict(showgrid=False),
-            yaxis=dict(showgrid=True, gridcolor='#334155', title='Customers')
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        st.subheader("Customer Lifetime Value Distribution")
-
-        # Generate sample CLV data
-        clv_ranges = ['$0-50', '$51-100', '$101-250', '$251-500', '$500+']
-        clv_counts = [320, 485, 612, 245, 132]
-
-        fig = go.Figure(data=[go.Bar(
-            x=clv_ranges,
-            y=clv_counts,
-            marker_color='#8B5CF6',
-            text=clv_counts,
-            textposition='outside'
-        )])
-
-        fig.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='#F1F5F9',
-            height=300,
-            margin=dict(l=0, r=0, t=20, b=0),
-            xaxis=dict(showgrid=False, title='CLV Range'),
-            yaxis=dict(showgrid=True, gridcolor='#334155', title='Count')
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-    # Cohort analysis
-    st.subheader("Customer Retention Cohort Analysis")
-
-    months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
-    cohort_data = [
-        [100, 85, 72, 68, 65, 62],
-        [100, 88, 75, 70, 67, None],
-        [100, 90, 78, 73, None, None],
-        [100, 87, 76, None, None, None],
-        [100, 89, None, None, None, None],
-        [100, None, None, None, None, None]
-    ]
-
-    df_cohort = pd.DataFrame(cohort_data, columns=months, index=months)
-
-    fig = go.Figure(data=go.Heatmap(
-        z=df_cohort.values,
-        x=df_cohort.columns,
-        y=df_cohort.index,
-        colorscale='Blues',
-        text=df_cohort.values,
-        texttemplate='%{text}%',
-        textfont={"size": 10}
-    ))
-
-    fig.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font_color='#F1F5F9',
-        height=300,
-        xaxis=dict(title='Months Since First Purchase'),
-        yaxis=dict(title='Cohort (First Purchase Month)')
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def render_inventory_analysis():
-    """Inventory performance and turnover analysis"""
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("Inventory Turnover by Category")
-
-        categories = ['Jazz Classics', 'Bebop', 'Fusion', 'Vocal', 'Contemporary']
-        turnover = [8.5, 7.2, 6.8, 9.1, 5.4]
-
-        fig = go.Figure(data=[go.Bar(
-            y=categories,
-            x=turnover,
+            x=top_albums['units_sold'],
+            y=[f"{row['title'][:30]}... - {row['artist'][:20]}" if len(row['title']) > 30
+               else f"{row['title']} - {row['artist'][:20]}"
+               for _, row in top_albums.iterrows()],
             orientation='h',
             marker_color='#6366F1',
-            text=[f"{t}x" for t in turnover],
-            textposition='outside'
+            text=[f"{units} units" for units in top_albums['units_sold']],
+            textposition='outside',
+            hovertemplate='<b>%{y}</b><br>Units Sold: %{x}<br><extra></extra>'
         )])
 
         fig.update_layout(
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
             font_color='#F1F5F9',
-            height=300,
+            height=400,
             margin=dict(l=0, r=0, t=20, b=0),
-            xaxis=dict(showgrid=True, gridcolor='#334155', title='Turnover Rate'),
+            xaxis=dict(showgrid=True, gridcolor='#334155', title='Units Sold'),
             yaxis=dict(showgrid=False)
         )
 
         st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No sales data available yet")
+
+
+def render_customer_insights(analytics: AnalyticsConnector):
+    """Customer analytics and segmentation - REAL DATA"""
+
+    st.subheader("🎖️ Top Customers by Total Spending")
+
+    top_customers = analytics.get_top_customers(limit=15)
+
+    if not top_customers.empty:
+        # Display as a nice table
+        display_df = top_customers.copy()
+        display_df['total_spent'] = display_df['total_spent'].apply(lambda x: f"${x:,.2f}")
+        display_df = display_df.rename(columns={
+            'name': 'Customer Name',
+            'email': 'Email',
+            'total_spent': 'Total Spent',
+            'order_count': 'Orders'
+        })
+
+        st.dataframe(
+            display_df[['Customer Name', 'Email', 'Total Spent', 'Orders']],
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # Visualize top 10 customers
+        st.subheader("Top 10 Customers Visualization")
+
+        top_10 = top_customers.head(10)
+
+        fig = go.Figure(data=[go.Bar(
+            x=top_10['total_spent'],
+            y=top_10['name'],
+            orientation='h',
+            marker_color='#8B5CF6',
+            text=[f"${spent:,.2f}" for spent in top_10['total_spent']],
+            textposition='outside',
+            hovertemplate='<b>%{y}</b><br>Total Spent: $%{x:,.2f}<br><extra></extra>'
+        )])
+
+        fig.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font_color='#F1F5F9',
+            height=400,
+            margin=dict(l=0, r=0, t=20, b=0),
+            xaxis=dict(showgrid=True, gridcolor='#334155', title='Total Spent ($)'),
+            yaxis=dict(showgrid=False, autorange="reversed")
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.info("No customer data available yet")
+
+    # Customer engagement metrics
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        total_customers = analytics.get_total_customers()
+        st.metric("Total Customers", f"{total_customers:,}")
 
     with col2:
-        st.subheader("Stock Levels Overview")
+        avg_rating = analytics.get_average_rating()
+        st.metric("Avg Customer Rating", f"{avg_rating:.2f} ⭐")
 
+    with col3:
+        review_count = analytics.get_review_count()
+        st.metric("Total Reviews", f"{review_count:,}")
+
+
+def render_inventory_analysis(analytics: AnalyticsConnector):
+    """Inventory performance and turnover analysis - REAL DATA"""
+
+    # Inventory summary metrics
+    col1, col2, col3, col4 = st.columns(4)
+
+    inventory_summary = analytics.get_inventory_summary()
+    inventory_value = analytics.get_total_inventory_value()
+
+    with col1:
+        st.metric("Total Albums", f"{inventory_summary['total_items']:,}")
+
+    with col2:
+        st.metric("Optimal Stock", f"{inventory_summary['optimal_stock']:,}", delta="Good")
+
+    with col3:
+        st.metric("Low Stock", f"{inventory_summary['low_stock']:,}",
+                 delta=f"-{inventory_summary['low_stock']}", delta_color="inverse")
+
+    with col4:
+        st.metric("Inventory Value", f"${inventory_value:,.2f}")
+
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Stock Levels Distribution")
+
+        # Real stock status
         stock_status = {
-            'Optimal Stock': 1245,
-            'Low Stock': 87,
-            'Out of Stock': 23,
-            'Overstock': 45
+            'Optimal Stock (>20)': inventory_summary['optimal_stock'],
+            'Low Stock (1-20)': inventory_summary['low_stock'],
+            'Out of Stock': inventory_summary['out_of_stock']
         }
 
-        colors = ['#10B981', '#F59E0B', '#EF4444', '#6366F1']
+        colors = ['#10B981', '#F59E0B', '#EF4444']
 
         fig = go.Figure(data=[go.Pie(
             labels=list(stock_status.keys()),
             values=list(stock_status.values()),
             hole=0.4,
-            marker=dict(colors=colors)
+            marker=dict(colors=colors),
+            textinfo='label+value',
+            hovertemplate='<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent}<extra></extra>'
         )])
 
         fig.update_layout(
@@ -330,180 +309,328 @@ def render_inventory_analysis():
 
         st.plotly_chart(fig, use_container_width=True)
 
-    # Slow-moving items table
-    st.subheader("Slow-Moving Inventory (AI Identified)")
+    with col2:
+        st.subheader("Label Performance")
 
-    slow_items = pd.DataFrame([
-        {'Album': 'Experimental Jazz Vol. 3', 'Artist': 'Various Artists', 'Days in Stock': 287, 'Units': 12, 'AI Recommendation': 'Discount 15%'},
-        {'Album': 'Nordic Jazz Sessions', 'Artist': 'Lars Hansen', 'Days in Stock': 245, 'Units': 8, 'AI Recommendation': 'Bundle offer'},
-        {'Album': 'Smooth Grooves Collection', 'Artist': 'Various Artists', 'Days in Stock': 198, 'Units': 15, 'AI Recommendation': 'Feature in newsletter'},
-        {'Album': 'Late Night Lounge', 'Artist': 'The Trio', 'Days in Stock': 176, 'Units': 6, 'AI Recommendation': 'Clearance sale'},
-    ])
+        label_perf = analytics.get_label_performance()
 
-    st.dataframe(slow_items, use_container_width=True, hide_index=True)
+        if not label_perf.empty:
+            top_labels = label_perf.head(7)
+
+            fig = go.Figure(data=[go.Bar(
+                x=top_labels['label'],
+                y=top_labels['revenue'],
+                marker_color='#6366F1',
+                text=[f"${r:,.0f}" for r in top_labels['revenue']],
+                textposition='outside',
+                hovertemplate='<b>%{x}</b><br>Revenue: $%{y:,.2f}<br><extra></extra>'
+            )])
+
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#F1F5F9',
+                height=300,
+                margin=dict(l=0, r=0, t=20, b=0),
+                xaxis=dict(showgrid=False),
+                yaxis=dict(showgrid=True, gridcolor='#334155', title='Revenue ($)')
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No label data available")
+
+    # Low stock items - REAL DATA
+    st.subheader("⚠️ Low Stock Alerts (≤20 units)")
+
+    low_stock_albums = analytics.get_low_stock_albums(threshold=20)
+
+    if not low_stock_albums.empty:
+        display_df = low_stock_albums.copy()
+        display_df['price'] = display_df['price'].apply(lambda x: f"${x:,.2f}")
+        display_df = display_df.rename(columns={
+            'title': 'Album',
+            'artist': 'Artist',
+            'quantity': 'Stock',
+            'price': 'Price'
+        })
+
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+    else:
+        st.success("All albums have sufficient stock! 🎉")
 
 
-def render_ai_predictions():
-    """AI-powered predictive analytics"""
+def render_ai_predictions(analytics: AnalyticsConnector):
+    """AI-powered business consultation - Using Gemini API with Langsmith tracing"""
 
-    st.subheader("AI Sales Forecast (Next 30 Days)")
+    st.subheader("🤖 AI Business Consultant")
+    st.caption("Powered by Gemini API with Langsmith tracing")
 
-    # Generate forecast data
-    dates = pd.date_range(start=datetime.now(), periods=30, freq='D')
-    historical = [random.randint(4000, 6000) for _ in range(15)]
-    forecast = [random.randint(4500, 7000) for _ in range(30)]
+    # Initialize AI consultant
+    try:
+        ai_consultant = AIBusinessConsultant()
+    except Exception as e:
+        st.error(f"Failed to initialize AI consultant: {e}")
+        st.info("Make sure GEMINI_API_KEY and Langsmith credentials are set in .env")
+        return
 
-    fig = go.Figure()
-
-    # Historical
-    fig.add_trace(go.Scatter(
-        x=dates[:15],
-        y=historical,
-        mode='lines+markers',
-        name='Historical',
-        line=dict(color='#6366F1', width=2),
-        marker=dict(size=6)
-    ))
-
-    # Forecast
-    fig.add_trace(go.Scatter(
-        x=dates,
-        y=forecast,
-        mode='lines',
-        name='Forecast',
-        line=dict(color='#8B5CF6', width=2, dash='dash')
-    ))
-
-    # Confidence interval
-    upper_bound = [f + random.randint(500, 1000) for f in forecast]
-    lower_bound = [f - random.randint(500, 1000) for f in forecast]
-
-    fig.add_trace(go.Scatter(
-        x=dates.tolist() + dates[::-1].tolist(),
-        y=upper_bound + lower_bound[::-1],
-        fill='toself',
-        fillcolor='rgba(139, 92, 246, 0.2)',
-        line=dict(color='rgba(255,255,255,0)'),
-        name='Confidence Interval',
-        showlegend=True
-    ))
-
-    fig.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font_color='#F1F5F9',
-        height=400,
-        margin=dict(l=0, r=0, t=20, b=0),
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor='#334155', title='Revenue ($)')
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    # Prediction insights
-    col1, col2, col3 = st.columns(3)
+    # Consultation options
+    col1, col2, col3 = st.columns([2, 2, 1])
 
     with col1:
-        st.metric("Predicted Revenue (30d)", "$186,500", "+14.2%")
+        consultation_type = st.selectbox(
+            "Consultation Focus",
+            ["Overall Business Health", "Revenue Optimization", "Customer Strategy", "Inventory Management"],
+            help="Choose what aspect of your business to analyze"
+        )
 
     with col2:
-        st.metric("Confidence Score", "87.5%", "High")
+        report_format = st.selectbox(
+            "Report Style",
+            ["Executive Summary", "Detailed Analysis", "Quick Insights"],
+            help="Choose the depth and format of analysis"
+        )
 
     with col3:
-        st.metric("Model Accuracy", "92.3%", "+2.1pp")
+        if st.button("🎯 Generate Report", use_container_width=True, type="primary"):
+            st.session_state.generate_ai_report = True
 
-    # AI recommendations
-    st.subheader("AI-Generated Recommendations")
+    st.markdown("---")
 
-    recommendations = [
-        {"priority": "🔴 High", "recommendation": "Stock up on Jazz Fusion albums - 34% demand increase predicted", "impact": "$12,400 revenue"},
-        {"priority": "🟡 Medium", "recommendation": "Launch customer re-engagement campaign - 245 inactive customers identified", "impact": "$8,700 revenue"},
-        {"priority": "🟡 Medium", "recommendation": "Optimize pricing for premium vinyl - price elasticity analysis complete", "impact": "$5,200 revenue"},
-        {"priority": "🟢 Low", "recommendation": "Adjust store hours on Thursdays - low foot traffic detected", "impact": "$1,800 savings"},
-    ]
+    # Map selections to focus areas
+    focus_map = {
+        "Overall Business Health": "overall",
+        "Revenue Optimization": "revenue",
+        "Customer Strategy": "customer",
+        "Inventory Management": "inventory"
+    }
 
-    for rec in recommendations:
-        with st.expander(f"{rec['priority']} - {rec['recommendation']}"):
-            st.write(f"**Estimated Impact:** {rec['impact']}")
-            st.write(f"**AI Confidence:** {random.randint(75, 95)}%")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.button("✓ Accept", key=f"accept_{rec['recommendation'][:20]}")
-            with col2:
-                st.button("✗ Dismiss", key=f"dismiss_{rec['recommendation'][:20]}")
+    # Generate AI consultation report
+    if st.session_state.get('generate_ai_report', False) or st.session_state.get('ai_report_cache'):
+
+        with st.spinner("🧠 AI Consultant analyzing your business data..."):
+
+            # Check cache first
+            if not st.session_state.get('ai_report_cache') or st.session_state.get('generate_ai_report'):
+
+                focus_area = focus_map[consultation_type]
+
+                if report_format == "Quick Insights":
+                    # Generate quick insights
+                    insights = ai_consultant.generate_quick_insights(limit=5)
+                    st.session_state.ai_report_cache = {
+                        "type": "quick_insights",
+                        "data": insights,
+                        "timestamp": datetime.now()
+                    }
+                else:
+                    # Generate full consultation report
+                    result = ai_consultant.generate_consultation_report(focus_area=focus_area)
+                    st.session_state.ai_report_cache = {
+                        "type": "full_report",
+                        "data": result,
+                        "timestamp": datetime.now()
+                    }
+
+                st.session_state.generate_ai_report = False
+
+        # Display the report
+        cached_report = st.session_state.ai_report_cache
+
+        if cached_report["type"] == "quick_insights":
+            st.subheader("⚡ Quick Business Insights")
+            st.caption(f"Generated at {cached_report['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
+
+            insights = cached_report["data"]
+
+            if insights:
+                for i, insight in enumerate(insights, 1):
+                    priority_colors = {
+                        "High": "🔴",
+                        "Medium": "🟡",
+                        "Low": "🟢"
+                    }
+
+                    priority = insight.get('priority', 'Medium')
+                    emoji = priority_colors.get(priority, "⚪")
+
+                    with st.expander(f"{emoji} Insight #{i}: {insight.get('insight', 'N/A')}", expanded=(i == 1)):
+                        st.markdown(f"**Priority:** {priority}")
+                        st.markdown(f"**Action:** {insight.get('action', 'N/A')}")
+                        st.markdown(f"**Expected Impact:** {insight.get('impact', 'N/A')}")
+            else:
+                st.warning("No insights generated. Try generating a full report.")
+
+        elif cached_report["type"] == "full_report":
+            result = cached_report["data"]
+
+            if result["success"]:
+                st.subheader(f"📊 {consultation_type} - Business Consultation Report")
+                st.caption(f"Generated at {cached_report['timestamp'].strftime('%Y-%m-%d %H:%M:%S')} | Model: {result['model']}")
+
+                # Display the AI-generated consultation
+                st.markdown(result["report"])
+
+                # Add download button
+                st.download_button(
+                    label="📥 Download Report",
+                    data=result["report"],
+                    file_name=f"misty_consultation_{result['focus_area']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                    mime="text/plain"
+                )
+
+            else:
+                st.error(f"Failed to generate report: {result.get('error', 'Unknown error')}")
+
+        # Clear cache button
+        if st.button("🔄 Generate New Report", use_container_width=True):
+            st.session_state.ai_report_cache = None
+            st.session_state.generate_ai_report = True
+            st.rerun()
+
+    else:
+        # Show instructions when no report is generated
+        st.info("👆 Select your consultation focus and click **Generate Report** to get AI-powered business insights based on your Supabase data.")
+
+        # Show preview of data being analyzed
+        with st.expander("📋 Preview: Data Being Analyzed", expanded=False):
+            st.markdown("""
+            The AI consultant will analyze:
+            - 💰 Financial metrics (revenue, orders, avg order value)
+            - 👥 Customer data (top customers, ratings, reviews)
+            - 📦 Inventory status (stock levels, low stock alerts)
+            - 🎵 Product performance (top albums, genres, labels)
+            - 💳 Payment analytics (methods, success rates)
+
+            **Powered by:**
+            - Gemini 
+            - Langsmith (full traceability and monitoring)
+            - Real-time Supabase data
+            """)
+
+    st.markdown("---")
+
+    # Quick metrics snapshot
+    st.subheader("📈 Current Business Snapshot")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    top_albums = analytics.get_top_selling_albums(limit=1)
+    low_stock = analytics.get_low_stock_albums(threshold=10)
+    top_customers = analytics.get_top_customers(limit=1)
+    avg_rating = analytics.get_average_rating()
+
+    with col1:
+        if not top_albums.empty:
+            st.metric("Best Seller", top_albums.iloc[0]['title'][:20] + "...",
+                     f"{int(top_albums.iloc[0]['units_sold'])} units")
+
+    with col2:
+        st.metric("Low Stock Items", len(low_stock),
+                 delta=f"-{len(low_stock)}" if len(low_stock) > 0 else "All good",
+                 delta_color="inverse")
+
+    with col3:
+        if not top_customers.empty:
+            st.metric("Top Customer", top_customers.iloc[0]['name'][:15],
+                     f"${top_customers.iloc[0]['total_spent']:,.0f}")
+
+    with col4:
+        st.metric("Avg Rating", f"{avg_rating:.2f} ⭐",
+                 "Excellent" if avg_rating >= 4.5 else "Good" if avg_rating >= 4.0 else "Needs Improvement")
 
 
-def render_genre_performance():
-    """Genre-specific performance analytics"""
+def render_genre_performance(analytics: AnalyticsConnector):
+    """Genre-specific performance analytics - REAL DATA"""
 
-    st.subheader("Genre Performance Comparison")
+    st.subheader("🎵 Genre Performance Analysis")
 
-    # Genre data
-    genres = ['Bebop', 'Cool Jazz', 'Fusion', 'Vocal Jazz', 'Hard Bop', 'Modal Jazz', 'Contemporary']
-    revenue = [28500, 24300, 31200, 19800, 22400, 18900, 15600]
-    units = [542, 489, 623, 387, 445, 371, 298]
-    margin = [35, 32, 38, 28, 34, 31, 29]
+    genre_data = analytics.get_genre_performance()
 
-    df = pd.DataFrame({
-        'Genre': genres,
-        'Revenue': revenue,
-        'Units': units,
-        'Margin %': margin
-    })
+    if not genre_data.empty:
+        # Summary metrics
+        col1, col2, col3 = st.columns(3)
 
-    # Multi-metric chart
-    fig = go.Figure()
+        with col1:
+            st.metric("Total Genres", len(genre_data))
 
-    fig.add_trace(go.Bar(
-        name='Revenue',
-        x=df['Genre'],
-        y=df['Revenue'],
-        marker_color='#6366F1',
-        yaxis='y',
-        offsetgroup=1
-    ))
+        with col2:
+            best_genre = genre_data.iloc[0]
+            st.metric("Top Genre", best_genre['genre'], f"${best_genre['revenue']:,.0f}")
 
-    fig.add_trace(go.Scatter(
-        name='Margin %',
-        x=df['Genre'],
-        y=df['Margin %'],
-        marker_color='#10B981',
-        yaxis='y2',
-        mode='lines+markers',
-        line=dict(width=3)
-    ))
+        with col3:
+            total_units = genre_data['units_sold'].sum()
+            st.metric("Total Units Sold", f"{total_units:,}")
 
-    fig.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font_color='#F1F5F9',
-        height=400,
-        xaxis=dict(showgrid=False),
-        yaxis=dict(
-            title='Revenue ($)',
-            showgrid=True,
-            gridcolor='#334155'
-        ),
-        yaxis2=dict(
-            title='Margin (%)',
-            overlaying='y',
-            side='right',
-            showgrid=False
-        ),
-        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
-    )
+        st.markdown("---")
 
-    st.plotly_chart(fig, use_container_width=True)
+        # Visualize genre performance
+        col1, col2 = st.columns(2)
 
-    # Genre details table
-    st.subheader("Detailed Genre Metrics")
+        with col1:
+            st.subheader("Revenue by Genre")
 
-    genre_details = pd.DataFrame([
-        {'Genre': 'Bebop', 'Revenue': '$28,500', 'Units': 542, 'Avg Price': '$52.58', 'Margin': '35%', 'Trend': '↑ 8.2%'},
-        {'Genre': 'Cool Jazz', 'Revenue': '$24,300', 'Units': 489, 'Avg Price': '$49.69', 'Margin': '32%', 'Trend': '↑ 5.1%'},
-        {'Genre': 'Fusion', 'Revenue': '$31,200', 'Units': 623, 'Avg Price': '$50.08', 'Margin': '38%', 'Trend': '↑ 12.4%'},
-        {'Genre': 'Vocal Jazz', 'Revenue': '$19,800', 'Units': 387, 'Avg Price': '$51.16', 'Margin': '28%', 'Trend': '↓ 2.3%'},
-        {'Genre': 'Hard Bop', 'Revenue': '$22,400', 'Units': 445, 'Avg Price': '$50.34', 'Margin': '34%', 'Trend': '↑ 6.7%'},
-    ])
+            fig = go.Figure(data=[go.Bar(
+                x=genre_data['genre'],
+                y=genre_data['revenue'],
+                marker_color='#6366F1',
+                text=[f"${r:,.0f}" for r in genre_data['revenue']],
+                textposition='outside',
+                hovertemplate='<b>%{x}</b><br>Revenue: $%{y:,.2f}<br><extra></extra>'
+            )])
 
-    st.dataframe(genre_details, use_container_width=True, hide_index=True)
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#F1F5F9',
+                height=400,
+                margin=dict(l=0, r=0, t=20, b=0),
+                xaxis=dict(showgrid=False, tickangle=-45),
+                yaxis=dict(showgrid=True, gridcolor='#334155', title='Revenue ($)')
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col2:
+            st.subheader("Units Sold by Genre")
+
+            fig = go.Figure(data=[go.Pie(
+                labels=genre_data['genre'],
+                values=genre_data['units_sold'],
+                hole=0.4,
+                hovertemplate='<b>%{label}</b><br>Units: %{value}<br>%{percent}<extra></extra>'
+            )])
+
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#F1F5F9',
+                height=400,
+                margin=dict(l=0, r=0, t=20, b=0)
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+        # Detailed table
+        st.subheader("Detailed Genre Metrics")
+
+        display_df = genre_data.copy()
+        display_df['avg_price'] = display_df['revenue'] / display_df['units_sold']
+        display_df['revenue'] = display_df['revenue'].apply(lambda x: f"${x:,.2f}")
+        display_df['avg_price'] = display_df['avg_price'].apply(lambda x: f"${x:,.2f}")
+
+        display_df = display_df.rename(columns={
+            'genre': 'Genre',
+            'units_sold': 'Units Sold',
+            'revenue': 'Total Revenue',
+            'avg_price': 'Avg Price'
+        })
+
+        st.dataframe(
+            display_df[['Genre', 'Total Revenue', 'Units Sold', 'Avg Price']],
+            use_container_width=True,
+            hide_index=True
+        )
+
+    else:
+        st.info("No genre sales data available yet")

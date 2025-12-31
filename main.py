@@ -8,7 +8,7 @@ LLM technology to automate processes, gain insights, and optimize operations.
 
 import streamlit as st
 from frontend.styles import CUSTOM_CSS
-from frontend.components import dashboard, knowledge, analytics, inventory, cases, activity, configuration
+from frontend.components import dashboard, analytics, activity, configuration, ai_reporting, rag
 
 
 # Logo setup
@@ -64,20 +64,11 @@ with st.sidebar:
         st.session_state.page = 'analytics'
         st.rerun()
 
-    # Activity - Redacted for now
-    #if st.button("⚡ Activity", use_container_width=True, type="primary" if st.session_state.page == 'activity' else "secondary"):
-    #    st.session_state.page = 'activity'
-    #    st.rerun()
-
-    # Cases
-    if st.button("📋 Cases", use_container_width=True, type="primary" if st.session_state.page == 'cases' else "secondary"):
-        st.session_state.page = 'cases'
+    # AI BI Reporting
+    if st.button("🤖 AI BI Reporting", use_container_width=True, type="primary" if st.session_state.page == 'ai_reporting' else "secondary"):
+        st.session_state.page = 'ai_reporting'
         st.rerun()
 
-    # Inventory
-    if st.button("📦 Smart Inventory", use_container_width=True, type="primary" if st.session_state.page == 'inventory' else "secondary"):
-        st.session_state.page = 'inventory'
-        st.rerun()
 
     # Knowledge
     if st.button("🧠 Knowledge", use_container_width=True, type="primary" if st.session_state.page == 'knowledge' else "secondary"):
@@ -112,17 +103,15 @@ elif st.session_state.page == 'analytics':
 elif st.session_state.page == 'activity':
     activity.render_activity()
 
-elif st.session_state.page == 'cases':
-    cases.render_cases()
-
-elif st.session_state.page == 'inventory':
-    inventory.render_inventory()
 
 elif st.session_state.page == 'knowledge':
-    knowledge.render_knowledge()
+    rag.render_knowledge()
 
 elif st.session_state.page == 'configuration':
     configuration.render_configuration()
+
+elif st.session_state.page == 'ai_reporting':
+    ai_reporting.render_ai_reporting()
 
 else:
     # Default to dashboard if unknown page
