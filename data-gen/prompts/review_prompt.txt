@@ -1,0 +1,21 @@
+Generate realistic customer reviews for vinyl albums purchased from an online store.
+
+Each review should:
+- Reference a valid customer_id and album_id from the provided lists
+- Have a rating from 1 to 5 stars
+- Include detailed, authentic review text that reflects the rating
+
+Rating distribution guidelines:
+- 5 stars: Enthusiastic, detailed, mentions sound quality, packaging, delivery
+- 4 stars: Positive but with minor critiques
+- 3 stars: Mixed review, some good points and some issues
+- 2 stars: Disappointed, specific complaints about condition or quality
+- 1 star: Very negative, major issues like wrong item, damaged, or misleading description
+
+Review text guidelines:
+- Length: 20-150 words
+- Be specific about the album, artist, sound quality, vinyl condition, packaging
+- Use varied vocabulary and authentic customer language
+- Mention specific details like: pressing quality, jacket condition, delivery speed, value for money
+- High ratings: use words like "pristine", "excellent pressing", "amazing sound", "well-packaged"
+- Low ratings: mention issues like "scratches", "warped", "poor quality", "disappointing"

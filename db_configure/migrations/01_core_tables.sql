@@ -46,7 +46,8 @@ CREATE TABLE albums (
     genre_id UUID REFERENCES genres(genre_id) ON DELETE SET NULL,
     label_id UUID REFERENCES labels(label_id) ON DELETE SET NULL,
     price NUMERIC NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 COMMENT ON TABLE albums IS 'Vinyl album catalog';
@@ -61,7 +62,7 @@ CREATE TABLE inventory (
 
 COMMENT ON TABLE inventory IS 'Real-time inventory tracking';
 
--- SALES TABLE (renamed from inventory_transactions)
+-- SALES TABLE 
 CREATE TABLE sales (
     transaction_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     inventory_id UUID REFERENCES inventory(inventory_id) ON DELETE CASCADE,
@@ -82,7 +83,8 @@ CREATE TABLE orders (
     total NUMERIC NOT NULL,
     shipping_address TEXT,
     order_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 COMMENT ON TABLE orders IS 'Customer orders';
@@ -93,13 +95,10 @@ CREATE TABLE order_items (
     order_id UUID REFERENCES orders(order_id) ON DELETE CASCADE,
     album_id UUID REFERENCES albums(album_id) ON DELETE SET NULL,
     quantity INT4 NOT NULL,
-    unit_price NUMERIC NOT NULL,
-    discount NUMERIC DEFAULT 0.00,
-    total NUMERIC NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-COMMENT ON TABLE order_items IS 'Line items in orders';
+COMMENT ON TABLE order_items IS 'Line items in orders - unit price calculated from albums.price via album_id';
 
 -- PAYMENTS TABLE
 CREATE TABLE payments (

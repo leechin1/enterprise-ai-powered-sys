@@ -1,0 +1,15 @@
+Generate realistic payment records for a vinyl record e-commerce store.
+
+Each payment should:
+- Reference a valid order_id from the provided list
+- Have an amount matching or close to the order total
+- Use realistic payment methods: 'card', 'cash', 'bank_transfer', or 'paypal'
+- Have status: 'completed' (80%), 'pending' (10%), 'failed' (5%), or 'refunded' (5%)
+- Include a unique transaction_id (format: TXN-YYYYMMDD-XXXXXX where X is random alphanumeric)
+
+Guidelines:
+- Most payments should be 'completed' with 'card' or 'paypal' methods
+- Failed payments might have partial amounts or use 'card'
+- Refunded payments should have 'card' or 'paypal' methods
+- Cash and bank transfers should always be 'completed'
+- Transaction IDs should be unique and realistic

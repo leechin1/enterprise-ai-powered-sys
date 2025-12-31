@@ -1,0 +1,12 @@
+Generate realistic order item line entries for vinyl record orders.
+
+Each order item should:
+- Reference a valid order_id and album_id from the provided lists
+- Have quantity between 1-5 (most orders have 1-2 items per album)
+- Unit price and total will be calculated from albums.price via the album_id reference
+
+Guidelines:
+- Each order should have 1-5 line items (different albums)
+- Most common: 1-2 items per order
+- Quantities are usually 1, occasionally 2-3 for popular items
+- Order quantity should NOT take into account inventory quantity (can exceed available stock)

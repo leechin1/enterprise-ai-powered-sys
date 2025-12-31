@@ -100,7 +100,7 @@ with st.sidebar:
 
     # Version info
     st.caption("Version 1.0.0")
-    st.caption("© 2024 Misty Jazz Records")
+    st.caption("© 2025 Misty Jazz Records")
 
 # Main content area
 if st.session_state.page == 'dashboard':

@@ -58,7 +58,6 @@ TEMPLATES = {
         'order': {
             "order_number": None,
             "customer_id": None,
-            "total": None,
             "shipping_address": None,
             "order_date": None
         },
@@ -69,6 +68,24 @@ TEMPLATES = {
             "trigger_config": {},
             "workflow_definition": {},
             "enabled": None
+        },
+        'order_item': {
+            "order_id": None,
+            "album_id": None,
+            "quantity": None
+        },
+        'payment': {
+            "order_id": None,
+            "amount": None,
+            "payment_method": None,
+            "status": None,
+            "transaction_id": None
+        },
+        'review': {
+            "customer_id": None,
+            "album_id": None,
+            "rating": None,
+            "review_text": None
         }
     }
 
@@ -99,7 +116,6 @@ class Album(BaseModel):
 class Order(BaseModel):
     order_number: str
     customer_id: str
-    total: float
     shipping_address: Optional[str] = None
     order_date: str
 
@@ -111,5 +127,26 @@ class Workflow(BaseModel):
     trigger_config: Dict[str, Any]
     workflow_definition: Dict[str, Any]
     enabled: bool
+
+
+class OrderItem(BaseModel):
+    order_id: str
+    album_id: str
+    quantity: int
+
+
+class Payment(BaseModel):
+    order_id: str
+    amount: float
+    payment_method: str  # 'card', 'cash', 'bank_transfer', 'paypal'
+    status: str  # 'pending', 'completed', 'failed', 'refunded'
+    transaction_id: str
+
+
+class Review(BaseModel):
+    customer_id: str
+    album_id: str
+    rating: int  # 1-5
+    review_text: str
 
 
