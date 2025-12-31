@@ -8,7 +8,7 @@ LLM technology to automate processes, gain insights, and optimize operations.
 
 import streamlit as st
 from frontend.styles import CUSTOM_CSS
-from frontend.components import dashboard, analytics, activity, configuration, ai_reporting, rag
+from frontend.components import dashboard, analytics, activity, configuration, ai_reporting, rag, marketing_emails
 
 
 # Logo setup
@@ -69,6 +69,10 @@ with st.sidebar:
         st.session_state.page = 'ai_reporting'
         st.rerun()
 
+    # Marketing Emails
+    if st.button("📧 Marketing Emails", use_container_width=True, type="primary" if st.session_state.page == 'marketing_emails' else "secondary"):
+        st.session_state.page = 'marketing_emails'
+        st.rerun()
 
     # Knowledge
     if st.button("🧠 Knowledge", use_container_width=True, type="primary" if st.session_state.page == 'knowledge' else "secondary"):
@@ -112,6 +116,9 @@ elif st.session_state.page == 'configuration':
 
 elif st.session_state.page == 'ai_reporting':
     ai_reporting.render_ai_reporting()
+
+elif st.session_state.page == 'marketing_emails':
+    marketing_emails.render_marketing_emails()
 
 else:
     # Default to dashboard if unknown page

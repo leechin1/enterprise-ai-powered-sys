@@ -367,3 +367,66 @@ class AnalyticsConnector:
             df = df.sort_values('revenue', ascending=False)
 
         return df
+
+    # ============ TABLE VIEWER ============
+
+    def get_available_tables(self) -> List[str]:
+        """Get list of available tables to query"""
+        return [
+            'customers',
+            'orders',
+            'order_items',
+            'albums',
+            'genres',
+            'labels',
+            'inventory',
+            'sales',
+            'payments',
+            'reviews'
+        ]
+
+    def get_table_data(self, table_name: str, limit: int = 100) -> pd.DataFrame:
+        """
+        Get all data from a specific table
+
+        Args:
+            table_name: Name of the table to query
+            limit: Maximum number of rows to return (default 100)
+
+        Returns:
+            DataFrame with table data
+        """
+        try:
+            # Validate table name to prevent SQL injection
+            valid_tables = self.get_available_tables()
+            if table_name not in valid_tables:
+                raise ValueError(f"Invalid table name: {table_name}")
+
+            # Query the table
+            result = self.client.table(table_name).select('*').limit(limit).execute()
+
+            if not result.data:
+                return pd.DataFrame()
+
+            # Convert to DataFrame
+            df = pd.DataFrame(result.data)
+
+            return df
+
+        except Exception as e:
+            print(f"Error getting table data for {table_name}: {e}")
+            return pd.DataFrame()
+
+    def get_table_count(self, table_name: str) -> int:
+        """Get total row count for a table"""
+        try:
+            valid_tables = self.get_available_tables()
+            if table_name not in valid_tables:
+                return 0
+
+            result = self.client.table(table_name).select('*', count='exact').limit(1).execute()
+            return result.count if result.count else 0
+
+        except Exception as e:
+            print(f"Error getting table count for {table_name}: {e}")
+            return 0

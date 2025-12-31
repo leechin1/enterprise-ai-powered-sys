@@ -61,11 +61,12 @@ def render_analytics():
     st.markdown("---")
 
     # Tabs for different analytics views
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📈 Sales Trends",
         "👥 Customer Insights",
         "📦 Inventory Analysis",
         "🎵 Genre Performance",
+        "🗄️ Table Viewer",
     ])
 
     with tab1:
@@ -79,6 +80,9 @@ def render_analytics():
 
     with tab4:
         render_genre_performance(analytics)
+
+    with tab5:
+        render_table_viewer(analytics)
 
 
 def render_sales_trends(analytics: AnalyticsConnector):
@@ -634,3 +638,81 @@ def render_genre_performance(analytics: AnalyticsConnector):
 
     else:
         st.info("No genre sales data available yet")
+
+
+def render_table_viewer(analytics: AnalyticsConnector):
+    """Database table viewer - RAW DATA"""
+
+    st.subheader("🗄️ Database Table Viewer")
+    st.caption("View raw data from any database table")
+
+    # Get available tables
+    available_tables = analytics.get_available_tables()
+
+    col1, col2, col3 = st.columns([2, 1, 1])
+
+    with col1:
+        selected_table = st.selectbox(
+            "Select Table",
+            available_tables,
+            help="Choose a table to view its data"
+        )
+
+    with col2:
+        row_limit = st.number_input(
+            "Rows to Display",
+            min_value=10,
+            max_value=1000,
+            value=100,
+            step=10,
+            help="Number of rows to fetch (max 1000)"
+        )
+
+    with col3:
+        if st.button("🔄 Refresh Data", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+
+    st.markdown("---")
+
+    # Get table info
+    total_rows = analytics.get_table_count(selected_table)
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown(f"**Table:** `{selected_table}`")
+    with col2:
+        st.metric("Total Rows", f"{total_rows:,}")
+
+    # Fetch and display table data
+    with st.spinner(f"Loading data from {selected_table}..."):
+        table_df = analytics.get_table_data(selected_table, limit=row_limit)
+
+        if not table_df.empty:
+            # Show table info
+            st.caption(f"Showing {len(table_df)} of {total_rows} rows")
+
+            # Display the raw data
+            st.dataframe(
+                table_df,
+                use_container_width=True,
+                hide_index=True,
+                height=500
+            )
+
+        
+
+            # Download button
+            csv_data = table_df.to_csv(index=False)
+            st.download_button(
+                label=f"📥 Download {selected_table}.csv",
+                data=csv_data,
+                file_name=f"{selected_table}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
+        else:
+            st.info(f"No data found in {selected_table} table")
+
+
