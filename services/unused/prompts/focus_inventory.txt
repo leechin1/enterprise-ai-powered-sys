@@ -1,0 +1,7 @@
+Consultation Request - Inventory Focus
+Analyze inventory metrics and provide:
+1. Stock level optimization recommendations
+2. Low stock item prioritization
+3. Overstock management strategies
+4. Inventory value optimization
+5. Supplier relationship recommendations

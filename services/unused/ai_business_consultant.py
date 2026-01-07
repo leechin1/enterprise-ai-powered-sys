@@ -11,10 +11,15 @@ from google.genai import types
 import pandas as pd
 from datetime import datetime
 from langsmith import traceable, Client
+import logging
 from utils.db_analytics import AnalyticsConnector
 
 load_dotenv()
 
+# Silence OpenTelemetry (Langfuse) errors
+logging.getLogger("opentelemetry.sdk._shared_internal").setLevel(logging.CRITICAL)
+
+from langfuse import observe, get_client  # traceability
 
 class AIBusinessConsultant:
     """AI agent that analyzes business data and generates consultation reports"""
@@ -26,18 +31,32 @@ class AIBusinessConsultant:
         # Initialize Langsmith for tracing
         self.langsmith_client = Client()
 
+        # Load prompts from files
+        self.prompts_dir = os.path.join(os.path.dirname(__file__), 'prompts')
+        self.system_instruction = self._load_prompt('system_instruction.txt')
+        self.focus_prompts = {
+            'overall': self._load_prompt('focus_overall.txt'),
+            'revenue': self._load_prompt('focus_revenue.txt'),
+            'customer': self._load_prompt('focus_customer.txt'),
+            'inventory': self._load_prompt('focus_inventory.txt')
+        }
+        self.quick_insights_template = self._load_prompt('quick_insights_template.txt')
+
         self.generation_config = types.GenerateContentConfig(
-            system_instruction=[
-                "You are an expert business consultant specializing in retail analytics for a jazz vinyl record store called 'Misty Jazz Records'.",
-                "You analyze sales data, inventory metrics, customer behavior, and market trends to provide actionable business insights.",
-                "Your tone is professional, data-driven, and focused on ROI and growth strategies.",
-                "Always provide specific, measurable recommendations backed by the data provided.",
-                "Format your responses in clear sections with bullet points and metrics."
-            ],
+            system_instruction=self.system_instruction.split('\n'),
             temperature=0.7,
             top_p=0.95,
             top_k=40,
         )
+
+    def _load_prompt(self, filename: str) -> str:
+        """Load a prompt from the prompts directory"""
+        filepath = os.path.join(self.prompts_dir, filename)
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                return f.read().strip()
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Prompt file not found: {filepath}")
 
     @traceable(name="gather_business_metrics")
     def gather_business_metrics(self) -> Dict[str, Any]:
@@ -136,50 +155,7 @@ Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 - Failed Payments: {payment_status.get('failed', 0)}
 """
 
-        focus_instructions = {
-            "overall": """
-## Consultation Request
-Please provide a comprehensive business consultation covering:
-1. **Executive Summary**: Overall business health and key highlights
-2. **Revenue Analysis**: Revenue trends, opportunities, and concerns
-3. **Customer Strategy**: Customer retention and growth recommendations
-4. **Inventory Optimization**: Stock management and purchasing decisions
-5. **Product Strategy**: Which albums/genres to focus on
-6. **Risk Assessment**: Potential issues and mitigation strategies
-7. **Action Plan**: Top 5 prioritized recommendations with expected ROI
-
-Be specific, use the actual numbers provided, and give actionable advice.
-""",
-            "revenue": """
-## Consultation Request - Revenue Focus
-Analyze the revenue metrics and provide:
-1. Revenue health assessment
-2. Average order value optimization strategies
-3. Upselling and cross-selling opportunities
-4. Pricing strategy recommendations
-5. Revenue growth projections and tactics
-""",
-            "customer": """
-## Consultation Request - Customer Focus
-Analyze customer metrics and provide:
-1. Customer satisfaction assessment based on ratings
-2. VIP customer retention strategies
-3. Customer acquisition recommendations
-4. Review generation tactics
-5. Customer lifetime value optimization
-""",
-            "inventory": """
-## Consultation Request - Inventory Focus
-Analyze inventory metrics and provide:
-1. Stock level optimization recommendations
-2. Low stock item prioritization
-3. Overstock management strategies
-4. Inventory value optimization
-5. Supplier relationship recommendations
-"""
-        }
-
-        prompt += focus_instructions.get(focus_area, focus_instructions["overall"])
+        prompt += "\n\n" + self.focus_prompts.get(focus_area, self.focus_prompts["overall"])
 
         return prompt
 
@@ -204,7 +180,7 @@ Analyze inventory metrics and provide:
         # Generate consultation with Gemini
         try:
             response = self.gemini_client.models.generate_content(
-                model='gemini-2.5-flash',
+                model="gemini-3-flash-preview",
                 contents=prompt,
                 config=self.generation_config
             )
@@ -217,7 +193,7 @@ Analyze inventory metrics and provide:
                 "metrics": metrics,
                 "focus_area": focus_area,
                 "timestamp": datetime.now().isoformat(),
-                "model": "gemini-2.5-flash"
+                "model": "gemini-3-flash-preview"
             }
 
         except Exception as e:
@@ -243,25 +219,18 @@ Analyze inventory metrics and provide:
 
         metrics = self.gather_business_metrics()
 
-        prompt = f"""Based on this jazz vinyl record store data, generate {limit} quick, actionable business insights.
-
-Revenue: ${metrics['financial']['total_revenue']:,.2f}
-Orders: {metrics['financial']['total_orders']}
-Customers: {metrics['customers']['total_customers']}
-Low Stock Items: {metrics['inventory']['low_stock_items']}
-Failed Payments: {metrics['payments']['status_summary'].get('failed', 0)}
-
-Format each insight as:
-PRIORITY: [High/Medium/Low]
-INSIGHT: [One sentence description]
-ACTION: [Specific action to take]
-IMPACT: [Expected business impact]
-
-Provide exactly {limit} insights, separated by ---"""
+        prompt = self.quick_insights_template.format(
+            limit=limit,
+            revenue=f"{metrics['financial']['total_revenue']:,.2f}",
+            orders=metrics['financial']['total_orders'],
+            customers=metrics['customers']['total_customers'],
+            low_stock_items=metrics['inventory']['low_stock_items'],
+            failed_payments=metrics['payments']['status_summary'].get('failed', 0)
+        )
 
         try:
             response = self.gemini_client.models.generate_content(
-                model='gemini-2.5-flash',
+                model="gemini-3-flash-preview",
                 contents=prompt,
                 config=self.generation_config
             )

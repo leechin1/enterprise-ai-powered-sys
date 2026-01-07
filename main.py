@@ -7,8 +7,9 @@ LLM technology to automate processes, gain insights, and optimize operations.
 """
 
 import streamlit as st
+#from frontend.components.unused import ai_reporting
 from frontend.styles import CUSTOM_CSS
-from frontend.components import dashboard, analytics, activity, configuration, ai_reporting, rag, marketing_emails
+from frontend.components import dashboard, analytics, activity, configuration, rag, marketing_emails, ai_reporting_agent
 
 
 # Logo setup
@@ -65,8 +66,13 @@ with st.sidebar:
         st.rerun()
 
     # AI BI Reporting
-    if st.button("🤖 AI BI Reporting", use_container_width=True, type="primary" if st.session_state.page == 'ai_reporting' else "secondary"):
-        st.session_state.page = 'ai_reporting'
+    #if st.button("🤖 AI BI Reporting", use_container_width=True, type="primary" if st.session_state.page == 'ai_reporting' else "secondary"):
+    #    st.session_state.page = 'ai_reporting'
+    #    st.rerun()
+
+    # AI BI Reporting AGENT
+    if st.button("🤖 AI BI Reporting AGENT", use_container_width=True, type="primary" if st.session_state.page == 'ai_reporting_agent' else "secondary"):
+        st.session_state.page = 'ai_reporting_agent'
         st.rerun()
 
     # Marketing Emails
@@ -114,11 +120,14 @@ elif st.session_state.page == 'knowledge':
 elif st.session_state.page == 'configuration':
     configuration.render_configuration()
 
-elif st.session_state.page == 'ai_reporting':
-    ai_reporting.render_ai_reporting()
+#elif st.session_state.page == 'ai_reporting':
+#    ai_reporting.render_ai_reporting()
 
 elif st.session_state.page == 'marketing_emails':
     marketing_emails.render_marketing_emails()
+
+elif st.session_state.page == 'ai_reporting_agent':
+    ai_reporting_agent.render_ai_reporting_agent()
 
 else:
     # Default to dashboard if unknown page

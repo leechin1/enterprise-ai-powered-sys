@@ -1,0 +1,11 @@
+Consultation Request
+Please provide a comprehensive business consultation covering:
+1. Executive Summary: Overall business health and key highlights
+2. Revenue Analysis: Revenue trends, opportunities, and concerns
+3. Customer Strategy: Customer retention and growth recommendations
+4. Inventory Optimization: Stock management and purchasing decisions
+5. Product Strategy: Which albums/genres to focus on
+6. Risk Assessment: Potential issues and mitigation strategies
+7. Action Plan: Top 5 prioritized recommendations with expected ROI
+
+Be specific, use the actual numbers provided, and give actionable advice.

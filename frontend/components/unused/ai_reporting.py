@@ -1,5 +1,7 @@
 """
 AI Business Intelligence Reporting component for Misty AI Enterprise System
+Reporting based on the analytics provided by the AnalyticsConnector and enhanced
+by the AIBusinessConsultant service using Gemini API with Langsmith tracing.
 """
 import streamlit as st
 from datetime import datetime
@@ -25,26 +27,6 @@ def render_ai_reporting():
         ai_consultant = AIBusinessConsultant()
     except Exception as e:
         st.error(f"Failed to initialize AI consultant: {e}")
-        st.info("Make sure GEMINI_API_KEY, LANGSMITH_API_KEY, and Supabase credentials are set in .env")
-
-        with st.expander("🔧 Troubleshooting", expanded=True):
-            st.markdown("""
-            **Required environment variables:**
-            ```
-            GEMINI_API_KEY=your_gemini_key
-            LANGSMITH_API_KEY=your_langsmith_key
-            LANGSMITH_TRACING=true
-            LANGSMITH_PROJECT=misty-ai-enterprise
-            SUPABASE_URL=your_supabase_url
-            SUPABASE_SECRET_KEY=your_supabase_key
-            ```
-
-            **Setup steps:**
-            1. Get Gemini API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
-            2. Get Langsmith API key from [Langsmith](https://smith.langchain.com/)
-            3. Add all keys to your `.env` file
-            4. Restart the application
-            """)
         return
 
     # Header with business metrics snapshot

@@ -1,0 +1,15 @@
+Based on this jazz vinyl record store data, generate {limit} quick, actionable business insights.
+
+Revenue: ${revenue}
+Orders: {orders}
+Customers: {customers}
+Low Stock Items: {low_stock_items}
+Failed Payments: {failed_payments}
+
+Format each insight as:
+PRIORITY: [High/Medium/Low]
+INSIGHT: [One sentence description]
+ACTION: [Specific action to take]
+IMPACT: [Expected business impact]
+
+Provide exactly {limit} insights, separated by ---
