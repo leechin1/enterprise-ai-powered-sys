@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from utils.db_analytics import AnalyticsConnector
-from services.ai_business_consultant import AIBusinessConsultant
+from services.unused.ai_business_consultant import AIBusinessConsultant
 
 
 def render_ai_reporting():

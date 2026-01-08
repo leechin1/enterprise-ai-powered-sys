@@ -9,7 +9,7 @@ LLM technology to automate processes, gain insights, and optimize operations.
 import streamlit as st
 #from frontend.components.unused import ai_reporting
 from frontend.styles import CUSTOM_CSS
-from frontend.components import dashboard, analytics, activity, configuration, rag, marketing_emails, ai_reporting_agent
+from frontend.components import dashboard, analytics, activity, rag, marketing_emails, ai_reporting_agent
 
 
 # Logo setup
@@ -65,18 +65,14 @@ with st.sidebar:
         st.session_state.page = 'analytics'
         st.rerun()
 
-    # AI BI Reporting
-    #if st.button("🤖 AI BI Reporting", use_container_width=True, type="primary" if st.session_state.page == 'ai_reporting' else "secondary"):
-    #    st.session_state.page = 'ai_reporting'
-    #    st.rerun()
 
     # AI BI Reporting AGENT
-    if st.button("🤖 AI BI Reporting AGENT", use_container_width=True, type="primary" if st.session_state.page == 'ai_reporting_agent' else "secondary"):
+    if st.button("🤖 Business Reporting", use_container_width=True, type="primary" if st.session_state.page == 'ai_reporting_agent' else "secondary"):
         st.session_state.page = 'ai_reporting_agent'
         st.rerun()
 
-    # Marketing Emails
-    if st.button("📧 Marketing Emails", use_container_width=True, type="primary" if st.session_state.page == 'marketing_emails' else "secondary"):
+    # CRM- Marketing Emails + Review Responses
+    if st.button("📧 CRM", use_container_width=True, type="primary" if st.session_state.page == 'marketing_emails' else "secondary"):
         st.session_state.page = 'marketing_emails'
         st.rerun()
 
@@ -89,10 +85,6 @@ with st.sidebar:
 
     # Admin section
     st.markdown("### Admin")
-
-    if st.button("⚙️ Configuration", use_container_width=True, type="primary" if st.session_state.page == 'configuration' else "secondary"):
-        st.session_state.page = 'configuration'
-        st.rerun()
 
     if st.button("🚪 Sign Out", use_container_width=True):
         st.toast("Signing out...")
@@ -117,11 +109,7 @@ elif st.session_state.page == 'activity':
 elif st.session_state.page == 'knowledge':
     rag.render_knowledge()
 
-elif st.session_state.page == 'configuration':
-    configuration.render_configuration()
 
-#elif st.session_state.page == 'ai_reporting':
-#    ai_reporting.render_ai_reporting()
 
 elif st.session_state.page == 'marketing_emails':
     marketing_emails.render_marketing_emails()

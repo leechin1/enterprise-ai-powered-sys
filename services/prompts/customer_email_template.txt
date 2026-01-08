@@ -1,0 +1,15 @@
+EMAIL TEMPLATE GENERATED
+========================
+
+To: {email}
+Subject: {subject} - Misty Jazz Records
+
+Dear {first_name} {last_name},
+
+{context}
+
+Best regards,
+Misty Jazz Records Team
+
+========================
+Note: This is a generated template. Review before sending.

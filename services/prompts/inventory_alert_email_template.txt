@@ -1,0 +1,17 @@
+INVENTORY ALERT EMAIL
+=====================
+
+To: inventory@mistyjazzrecords.com
+Subject: LOW STOCK ALERT - Immediate Action Required
+
+Dear Inventory Manager,
+
+The following items have critically low stock levels and require immediate reordering:
+
+{items_list}
+
+Please review and place restock orders as soon as possible to avoid stockouts.
+
+Best regards,
+Misty AI Business Intelligence System
+=====================

@@ -1,0 +1,9 @@
+TRANSACTION CANCELLED
+====================
+Payment ID: {payment_id}
+Order ID: {order_id}
+Amount: ${amount}
+Previous Status: {previous_status}
+New Status: cancelled
+Reason: {reason}
+====================

@@ -1,0 +1,8 @@
+RESTOCK RECOMMENDATION
+======================
+Album: '{title}' by {artist}
+Current Stock: {current_stock} units
+Total Sold: {total_sold} units
+Recommended Restock: {recommended_qty} units
+Rationale: {rationale}
+======================

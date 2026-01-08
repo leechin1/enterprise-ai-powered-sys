@@ -1,7 +1,6 @@
 """
 AI Business Consultant Agent (Refactored)
-Uses LangChain agent architecture with Gemini and custom tools
-Enhanced with Pydantic schemas for structured outputs
+Uses LangChain agent architecture with Gemini 2.5-flash and custom tools
 """
 
 import os
@@ -15,16 +14,8 @@ import logging
 import json
 import re
 
-# Import Pydantic schemas for structured outputs
-from services.schemas.ba_agent_schemas import (
-    HealthAnalysisOutput,
-    IssuesAnalysisOutput,
-    RecommendationsOutput,
-    FixesOutput,
-)
-
-# Import query tools (read-only analytics)
-from services.tools.business_query_tools import (
+# Import tools
+from services.business_agent_tools import (
     scan_business_metrics,
     get_top_performing_products,
     get_top_customers,
@@ -32,14 +23,6 @@ from services.tools.business_query_tools import (
     get_failed_payments,
     get_pending_payments,
     get_genre_performance,
-    get_label_performance,
-    get_top_rated_albums,
-    get_payment_method_distribution,
-    get_revenue_by_date,
-)
-
-# Import generation tools (content generation & actions)
-from services.tools.business_generation_tools import (
     generate_customer_email,
     generate_inventory_alert_email,
     cancel_transaction,
@@ -55,7 +38,7 @@ logging.getLogger("opentelemetry.sdk._shared_internal").setLevel(logging.CRITICA
 
 
 class AIBusinessConsultantAgent:
-    """AI agent that analyzes business data using LangChain agent architecture with structured outputs"""
+    """AI agent that analyzes business data using LangChain agent architecture"""
 
     def __init__(self):
         # Initialize Gemini model via LangChain
@@ -67,7 +50,6 @@ class AIBusinessConsultantAgent:
 
         # Define available tools
         self.tools = [
-            # Query tools (analytics)
             scan_business_metrics,
             get_top_performing_products,
             get_top_customers,
@@ -75,11 +57,6 @@ class AIBusinessConsultantAgent:
             get_failed_payments,
             get_pending_payments,
             get_genre_performance,
-            get_label_performance,
-            get_top_rated_albums,
-            get_payment_method_distribution,
-            get_revenue_by_date,
-            # Generation tools (actions)
             generate_customer_email,
             generate_inventory_alert_email,
             cancel_transaction,
@@ -103,23 +80,18 @@ STRICT REQUIREMENTS:
 
 Use the available tools to scan business data and analyze performance.
 
-RESPONSE FORMAT:
-You MUST return your response as a JSON code block using this EXACT format:
-
-```json
+Format your response as a JSON object with this structure:
 {
   "insights": [
     {
       "title": "Brief title (4-6 words)",
       "content": "Concise insight content (2-3 sentences)",
       "priority": "high|medium|low",
-      "metric_type": "financial|customer|inventory|product|overall"
+      "metric_type": "financial|customer|inventory|product"
     }
   ]
 }
-```
-
-IMPORTANT: Wrap your JSON in a code block (```json ... ```) for proper parsing."""
+"""
 
         self.system_prompt_issues = """You are an expert business consultant for Misty Jazz Records, a premium vinyl record company.
 
@@ -137,24 +109,19 @@ STRICT REQUIREMENTS:
 
 Use the available tools to scan for issues in the business data.
 
-RESPONSE FORMAT:
-You MUST return your response as a JSON code block using this EXACT format:
-
-```json
+Format your response as a JSON object with this structure:
 {
   "issues": [
     {
       "title": "Issue title (4-6 words)",
       "description": "Brief description of the issue (2-3 sentences)",
       "impact": "high|medium|low",
-      "category": "payment|inventory|customer|financial|general",
+      "category": "payment|inventory|customer|financial",
       "affected_count": "Number of items/customers/transactions affected"
     }
   ]
 }
-```
-
-IMPORTANT: Wrap your JSON in a code block (```json ... ```) for proper parsing."""
+"""
 
         self.system_prompt_recommendations = """You are an expert business strategist for Misty Jazz Records.
 
@@ -167,10 +134,7 @@ STRICT REQUIREMENTS:
 - Prioritize by potential business value
 - Be concise (2-3 sentences per recommendation)
 
-RESPONSE FORMAT:
-You MUST return your response as a JSON code block using this EXACT format:
-
-```json
+Format your response as a JSON object with this structure:
 {
   "recommendations": [
     {
@@ -182,71 +146,39 @@ You MUST return your response as a JSON code block using this EXACT format:
     }
   ]
 }
-```
-
-IMPORTANT: Wrap your JSON in a code block (```json ... ```) for proper parsing."""
+"""
 
         self.system_prompt_fixes = """You are an expert business problem solver for Misty Jazz Records.
 
-CONTEXT:
-You will receive one or more business issues that need fixing. When a user selects a specific issue in the UI and clicks "Fix Problem", you'll receive just that ONE issue to solve.
-
-Your job is to provide targeted, actionable solutions for the issue(s) provided.
+Based on the issues identified, recommend specific fixes using available tools.
 
 STRICT REQUIREMENTS:
-- Provide a specific, actionable fix for EACH issue provided
-- Suggest which tools to use (if any) for automation
-- Include clear step-by-step actions the user should take
-- Be realistic about what can be automated vs requires manual work
-- If a tool can help, specify exactly how to use it (with example parameters from the data)
-- If manual intervention is needed, explain exactly what steps to take
+- Provide specific, actionable fixes for each issue
+- Suggest which tools to use for each fix
+- Include step-by-step actions
+- Be realistic about what can be automated vs manual work
+- Prioritize fixes by impact and feasibility
 
-AVAILABLE TOOLS FOR AUTOMATION:
+Available action tools:
+- generate_customer_email: Send communications to customers
+- generate_inventory_alert_email: Alert inventory team
+- cancel_transaction: Cancel failed/pending payments
+- recommend_restock_quantity: Get restock recommendations
 
-Query Tools (to gather specific data/IDs):
-- get_failed_payments(): Get list of failed payment IDs
-- get_pending_payments(): Get list of pending payment IDs
-- get_low_stock_items(threshold): Get album IDs with low stock
-- scan_business_metrics(): Get comprehensive business data
-- get_top_customers(limit): Get top spending customers
-
-Action Tools (to fix problems):
-- generate_customer_email(customer_id, email_type, context): Send targeted emails to customers
-- generate_inventory_alert_email(album_ids): Alert inventory team about low stock (comma-separated album IDs)
-- cancel_transaction(payment_id, reason): Cancel failed/pending payments
-- recommend_restock_quantity(album_id): Get restock recommendations for specific albums
-
-WORKFLOW:
-1. Analyze the issue details (title, description, category, affected_count)
-2. Use query tools to get specific IDs/data needed for the fix
-3. Recommend action tools with actual parameters from step 2
-4. Provide manual steps for anything that can't be automated
-
-RESPONSE FORMAT:
-You MUST return your response as a JSON code block using this EXACT format:
-
-```json
+Format your response as a JSON object with this structure:
 {
   "fixes": [
     {
-      "issue_title": "Exact title of the issue being fixed",
-      "fix_title": "Clear action-oriented title for the fix",
-      "description": "NON-TECHNICAL description for business users in paragraph format. Use plain language, NO function names, NO code syntax, NO technical jargon. Break into clear paragraphs explaining: What the problem is, Why it matters, What actions to take (in business terms), What the expected outcome is. Write as if explaining to a CEO or business manager.",
-      "technical_steps": "Technical implementation for developers. Include: 1) Specific query tools to use (e.g., get_failed_payments()) 2) Action tools with exact parameters (e.g., cancel_transaction(payment_id='xxx', reason='yyy')) 3) Any manual database queries or system operations needed 4) Expected technical outcome",
-      "tool_to_use": "Primary tool name (e.g., 'cancel_transaction', 'generate_inventory_alert_email') or 'manual' if no automation",
+      "issue_title": "Related issue from issues analysis",
+      "fix_title": "Fix action title",
+      "description": "How to fix this issue (2-3 sentences)",
+      "tool_to_use": "Tool name or 'manual'",
       "automation_level": "full|partial|manual",
-      "estimated_impact": "Specific expected improvement with numbers (e.g., 'Recover $X in revenue', 'Prevent stockouts for N items')"
+      "estimated_impact": "Expected improvement"
     }
   ]
 }
-```
-
-CRITICAL FORMATTING RULES:
-- description: Write for NON-TECHNICAL business users. Use proper paragraphs (separate with \\n\\n). NO function names, NO code, NO technical terms. Explain in plain business language.
-- technical_steps: Write for DEVELOPERS. Include all technical details, function names, parameters, and implementation specifics.
-- Keep these two fields completely separate - one for business stakeholders, one for technical implementation
-- Wrap your JSON in a code block (```json ... ```) for proper parsing
-- Return one fix object per issue provided in the input"""
+"""
 
         # Create agents for different analysis types
         self.health_agent = create_agent(
@@ -273,46 +205,6 @@ CRITICAL FORMATTING RULES:
             system_prompt=self.system_prompt_fixes
         )
 
-    def _extract_and_validate_json(self, response_text: str, schema_class, max_retries: int = 2):
-        """
-        Extract JSON from response and validate against Pydantic schema.
-        Supports both plain JSON and JSON within code blocks (```json ... ```).
-
-        Args:
-            response_text: Raw text response from LLM
-            schema_class: Pydantic model class to validate against
-            max_retries: Maximum retry attempts if validation fails
-
-        Returns:
-            Validated Pydantic model instance or dict on failure
-        """
-        # Try to extract JSON from code blocks first (```json ... ```)
-        json_block_pattern = r'```(?:json)?\s*\n?(.*?)\n?```'
-        code_block_match = re.search(json_block_pattern, response_text, re.DOTALL)
-
-        if code_block_match:
-            json_text = code_block_match.group(1).strip()
-        else:
-            # Fallback to finding any JSON object
-            json_match = re.search(r'\{[\s\S]*\}', response_text)
-            json_text = json_match.group(0) if json_match else response_text
-
-        try:
-            # Parse JSON
-            data = json.loads(json_text)
-
-            # Validate with Pydantic schema
-            validated_data = schema_class(**data)
-            return validated_data.model_dump()
-
-        except (json.JSONDecodeError, Exception) as e:
-            logging.warning(f"JSON extraction/validation failed: {e}")
-            # Return raw data as fallback
-            try:
-                return json.loads(json_text) if json_text else {}
-            except:
-                return {}
-
     @traceable(name="analyze_business_health")
     @observe()
     def analyze_business_health(self) -> Dict[str, Any]:
@@ -328,7 +220,10 @@ CRITICAL FORMATTING RULES:
                 "messages": [("user", "Analyze the overall business health of Misty Jazz Records. Use the available tools to gather data and provide exactly 6 key insights.")]
             })
 
-            # Extract and validate response
+            # Extract the response - handle both string and message object
+            import json
+            import re
+
             last_message = result["messages"][-1]
             if hasattr(last_message, 'content'):
                 agent_response = last_message.content
@@ -339,16 +234,18 @@ CRITICAL FORMATTING RULES:
 
             # Handle case where content is a list (e.g., content blocks)
             if isinstance(agent_response, list):
+                # Join list items or extract text from content blocks
                 agent_response = ' '.join([
                     item.get('text', str(item)) if isinstance(item, dict) else str(item)
                     for item in agent_response
                 ])
 
-            # Use helper to extract and validate JSON against Pydantic schema
-            insights_data = self._extract_and_validate_json(agent_response, HealthAnalysisOutput)
-
-            # Fallback if validation failed
-            if not insights_data or 'insights' not in insights_data:
+            # Try to extract JSON from response
+            json_match = re.search(r'\{[\s\S]*\}', str(agent_response))
+            if json_match:
+                insights_data = json.loads(json_match.group(0))
+            else:
+                # Fallback: create structured response from text
                 insights_data = {
                     "insights": [
                         {
@@ -389,7 +286,9 @@ CRITICAL FORMATTING RULES:
                 "messages": [("user", "Identify exactly 7 critical business issues at Misty Jazz Records. Use the available tools to scan for problems in payments, inventory, customers, and financials.")]
             })
 
-            # Extract and validate response
+            # Extract the response - handle both string and message object
+            
+
             last_message = result["messages"][-1]
             if hasattr(last_message, 'content'):
                 agent_response = last_message.content
@@ -400,16 +299,17 @@ CRITICAL FORMATTING RULES:
 
             # Handle case where content is a list (e.g., content blocks)
             if isinstance(agent_response, list):
+                # Join list items or extract text from content blocks
                 agent_response = ' '.join([
                     item.get('text', str(item)) if isinstance(item, dict) else str(item)
                     for item in agent_response
                 ])
 
-            # Use helper to extract and validate JSON against Pydantic schema
-            issues_data = self._extract_and_validate_json(agent_response, IssuesAnalysisOutput)
-
-            # Fallback if validation failed
-            if not issues_data or 'issues' not in issues_data:
+            # Parse JSON response
+            json_match = re.search(r'\{[\s\S]*\}', str(agent_response))
+            if json_match:
+                issues_data = json.loads(json_match.group(0))
+            else:
                 issues_data = {
                     "issues": [
                         {
@@ -460,7 +360,10 @@ CRITICAL FORMATTING RULES:
                 )]
             })
 
-            # Extract and validate response
+            # Extract the response - handle both string and message object
+            import json
+            import re
+
             last_message = result["messages"][-1]
             if hasattr(last_message, 'content'):
                 agent_response = last_message.content
@@ -471,16 +374,17 @@ CRITICAL FORMATTING RULES:
 
             # Handle case where content is a list (e.g., content blocks)
             if isinstance(agent_response, list):
+                # Join list items or extract text from content blocks
                 agent_response = ' '.join([
                     item.get('text', str(item)) if isinstance(item, dict) else str(item)
                     for item in agent_response
                 ])
 
-            # Use helper to extract and validate JSON against Pydantic schema
-            recommendations_data = self._extract_and_validate_json(agent_response, RecommendationsOutput)
-
-            # Fallback if validation failed
-            if not recommendations_data or 'recommendations' not in recommendations_data:
+            # Parse JSON response
+            json_match = re.search(r'\{[\s\S]*\}', str(agent_response))
+            if json_match:
+                recommendations_data = json.loads(json_match.group(0))
+            else:
                 recommendations_data = {
                     "recommendations": [
                         {
@@ -530,7 +434,10 @@ CRITICAL FORMATTING RULES:
                 )]
             })
 
-            # Extract and validate response
+            # Extract the response - handle both string and message object
+            import json
+            import re
+
             last_message = result["messages"][-1]
             if hasattr(last_message, 'content'):
                 agent_response = last_message.content
@@ -541,16 +448,17 @@ CRITICAL FORMATTING RULES:
 
             # Handle case where content is a list (e.g., content blocks)
             if isinstance(agent_response, list):
+                # Join list items or extract text from content blocks
                 agent_response = ' '.join([
                     item.get('text', str(item)) if isinstance(item, dict) else str(item)
                     for item in agent_response
                 ])
 
-            # Use helper to extract and validate JSON against Pydantic schema
-            fixes_data = self._extract_and_validate_json(agent_response, FixesOutput)
-
-            # Fallback if validation failed
-            if not fixes_data or 'fixes' not in fixes_data:
+            # Parse JSON response
+            json_match = re.search(r'\{[\s\S]*\}', str(agent_response))
+            if json_match:
+                fixes_data = json.loads(json_match.group(0))
+            else:
                 fixes_data = {
                     "fixes": [
                         {
@@ -569,7 +477,7 @@ CRITICAL FORMATTING RULES:
                 "type": "fixes",
                 "data": fixes_data,
                 "raw_response": agent_response,
-                "model": MODEL
+                "model": "gemini-3-flash-preview"
             }
 
         except Exception as e:
