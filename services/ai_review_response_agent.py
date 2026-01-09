@@ -17,6 +17,7 @@ from google import genai
 from google.genai import types
 from langfuse import observe
 from services.schemas.review_agent_schemas import ReviewResponseOutput
+from services.prompts import load_system_instructions
 
 load_dotenv()
 
@@ -304,12 +305,7 @@ CRITICAL FORMATTING RULES:
         for attempt in range(max_retries):
             try:
                 generation_config = types.GenerateContentConfig(
-                    system_instruction=[
-                        "You are an expert customer service representative for a premium jazz vinyl record store.",
-                        "Your responses are empathetic, professional, and tailored to each customer's specific review.",
-                        "You understand the nuances of customer sentiment and respond appropriately.",
-                        "You MUST follow the exact format specified in the prompt."
-                    ],
+                    system_instruction=load_system_instructions('review_response_system_instructions.txt'),
                     temperature=0.7,
                     top_p=0.9,
                     top_k=40,

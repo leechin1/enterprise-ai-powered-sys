@@ -16,6 +16,7 @@ from google import genai
 from google.genai import types
 from langfuse import observe
 from services.schemas.marketing_schemas import MarketingEmailOutput
+from services.prompts import load_system_instructions
 
 load_dotenv()
 
@@ -435,13 +436,7 @@ CRITICAL FORMATTING RULES:
         for attempt in range(max_retries):
             try:
                 generation_config = types.GenerateContentConfig(
-                    system_instruction=[
-                        "You are an expert email marketing copywriter for a premium jazz vinyl record store.",
-                        "Your emails are engaging, on-brand, and drive customer action.",
-                        "You understand different customer segments and tailor messaging accordingly.",
-                        "You create compelling subject lines that increase open rates.",
-                        "You MUST follow the exact format specified in the prompt."
-                    ],
+                    system_instruction=load_system_instructions('marketing_email_system_instructions.txt'),
                     temperature=0.8,
                     top_p=0.95,
                     top_k=40,

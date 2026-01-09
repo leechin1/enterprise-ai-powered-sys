@@ -12,7 +12,8 @@ import json
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from utils.db_analytics import AnalyticsConnector
-from services.ai_business_consultant_agent import AIBusinessConsultantAgent
+from services.ai_health_agent import AIHealthAgent
+from services.ai_issues_agent import AIIssuesAgent
 
 
 def render_ai_reporting_agent():
@@ -24,9 +25,10 @@ def render_ai_reporting_agent():
     # Initialize connectors
     try:
         analytics = AnalyticsConnector()
-        ai_agent = AIBusinessConsultantAgent()
+        health_agent = AIHealthAgent()
+        issues_agent = AIIssuesAgent()
     except Exception as e:
-        st.error(f"Failed to initialize AI consultant: {e}")
+        st.error(f"Failed to initialize AI agents: {e}")
         return
 
     # Header with business metrics snapshot
@@ -59,13 +61,13 @@ def render_ai_reporting_agent():
     tab1, tab2 = st.tabs(["📊 Overall Business Health", "⚠️ Issues & Problems"])
 
     with tab1:
-        render_health_tab(ai_agent)
+        render_health_tab(health_agent)
 
     with tab2:
-        render_issues_tab(ai_agent)
+        render_issues_tab(issues_agent)
 
 
-def render_health_tab(ai_agent):
+def render_health_tab(health_agent):
     """Render the Overall Business Health tab"""
     st.markdown("### 📊 Business Health Analysis")
     st.caption("AI-powered analysis of financial, customer, inventory, and product metrics")
@@ -73,7 +75,7 @@ def render_health_tab(ai_agent):
     # Generate button
     if st.button("🎯 Generate Health Analysis", use_container_width=True, type="primary", key="health_generate"):
         with st.spinner("🧠 AI Agent is analyzing your business health..."):
-            health_result = ai_agent.analyze_business_health()
+            health_result = health_agent.analyze_business_health()
             st.session_state.health_cache = health_result
             st.rerun()
 
@@ -81,19 +83,6 @@ def render_health_tab(ai_agent):
     if st.session_state.get('health_cache'):
         health_result = st.session_state.health_cache
         display_health_results(health_result)
-
-        st.markdown("---")
-
-        # Recommendations button
-        if st.button("💡 Generate Strategic Recommendations", use_container_width=True, type="secondary", key="health_recommendations"):
-            with st.spinner("🤔 Generating strategic recommendations..."):
-                recommendations = ai_agent.generate_recommendations(health_result)
-                st.session_state.recommendations_cache = recommendations
-                st.rerun()
-
-        # Display recommendations if available
-        if st.session_state.get('recommendations_cache'):
-            display_recommendations(st.session_state.recommendations_cache)
     else:
         st.info("👆 Click 'Generate Health Analysis' to analyze your business performance")
         with st.expander("🔍 What Gets Analyzed", expanded=False):
@@ -106,31 +95,65 @@ def render_health_tab(ai_agent):
             """)
 
 
-def render_issues_tab(ai_agent):
-    """Render the Issues & Problems tab"""
-    st.markdown("### ⚠️ Business Issues Detection")
-    st.caption("Identify and fix critical business problems with AI-powered solutions")
+def render_issues_tab(issues_agent):
+    """Render the Issues & Problems tab with three-stage reasoning"""
+    st.markdown("### ⚠️ Business Issues & Problems")
+    st.caption("Three-stage AI analysis: SQL Generation → Query Approval → Issue Identification → Fix Proposals")
 
-    # Generate button
-    if st.button("🔍 Scan for Issues", use_container_width=True, type="primary", key="issues_generate"):
-        with st.spinner("🧠 AI Agent is scanning for business issues..."):
-            issues_result = ai_agent.analyze_business_issues()
-            st.session_state.issues_cache = issues_result
+    # Stage 0: Generate SQL Queries button
+    if st.button("🔍 Stage 0: Generate SQL Queries", use_container_width=True, type="primary", key="sql_generate"):
+        with st.spinner("🧠 Stage 0: AI Agent analyzing database schema and generating SQL queries..."):
+            sql_result = issues_agent.generate_sql_queries()
+            st.session_state.sql_queries_cache = sql_result
+            st.session_state.issues_cache = None  # Clear previous results
+            st.session_state.fixes_cache = None
             st.rerun()
 
-    # Display results if available
+    # Display Stage 0: SQL Queries for approval
+    if st.session_state.get('sql_queries_cache'):
+        sql_result = st.session_state.sql_queries_cache
+        display_sql_queries(sql_result, issues_agent)
+
+        st.markdown("---")
+
+    # Display Stage 1: Issues if available
     if st.session_state.get('issues_cache'):
         issues_result = st.session_state.issues_cache
-        display_issues_with_fix_buttons(issues_result, ai_agent)
-    else:
-        st.info("👆 Click 'Scan for Issues' to identify business problems")
-        with st.expander("🔍 What Gets Scanned", expanded=False):
+        display_issues_results(issues_result)
+
+        st.markdown("---")
+
+        # Stage 2: Generate Fixes button
+        if st.button("🔧 Stage 2: Propose Fixes", use_container_width=True, type="secondary", key="fixes_generate"):
+            with st.spinner("🛠️ Stage 2: AI Agent proposing fixes using available business tools..."):
+                issues = issues_result.get('data', {}).get('issues', [])
+                fixes_result = issues_agent.propose_fixes(issues)
+                st.session_state.fixes_cache = fixes_result
+                st.rerun()
+
+        # Display Stage 2 results if available
+        if st.session_state.get('fixes_cache'):
+            fixes_result = st.session_state.fixes_cache
+            display_fixes_results(fixes_result)
+
+    elif not st.session_state.get('sql_queries_cache'):
+        st.info("👆 Click 'Stage 0: Generate SQL Queries' to start the three-stage analysis")
+        with st.expander("🔍 How It Works", expanded=False):
             st.markdown("""
-            - **Payment Issues**: Failed transactions, pending payments
-            - **Inventory Problems**: Low stock alerts, overstock situations
-            - **Customer Concerns**: Service issues, complaint patterns
-            - **Revenue Bottlenecks**: Underperforming products or categories
-            - **Operational Inefficiencies**: Process improvements needed
+            **Stage 0: SQL Query Generation**
+            - AI analyzes the database schema
+            - Generates 5-10 SQL queries to investigate potential issues
+            - You review and approve queries before execution
+
+            **Stage 1: Issue Identification**
+            - Executes approved SQL queries
+            - AI analyzes results to identify 7 critical issues
+            - Provides detailed descriptions with specific data
+
+            **Stage 2: Fix Proposals**
+            - AI proposes concrete fixes for each issue
+            - Suggests which business tools to use
+            - Provides step-by-step action plans
             """)
 
 
@@ -190,6 +213,66 @@ def render_issues_analysis(ai_agent):
                 st.session_state.analysis_cache["fixes"] = fixes
                 st.session_state.show_fixes = True
                 st.rerun()
+
+
+def display_sql_queries(sql_result, issues_agent):
+    """Display generated SQL queries for user approval"""
+    if not sql_result["success"]:
+        st.error(f"❌ SQL Generation failed: {sql_result.get('error', 'Unknown error')}")
+        return
+
+    st.success("✅ SQL Queries Generated!")
+    st.markdown("---")
+
+    st.subheader("📝 Generated SQL Queries")
+    st.caption(f"Review and approve these queries before execution | Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
+    st.caption(f"Model: {sql_result['model']}")
+
+    queries = sql_result.get("data", {}).get("queries", [])
+
+    if not queries:
+        st.warning("No queries generated. Please try again.")
+        return
+
+    # Display queries in expandable sections
+    for i, query in enumerate(queries, 1):
+        priority = query.get("priority", "medium")
+        priority_emoji = {"critical": "🔴", "high": "🟠", "medium": "🟡"}.get(priority, "⚪")
+
+        with st.expander(f"{priority_emoji} Query {query.get('query_id', i)}: {query.get('purpose', 'Unknown')}", expanded=(i == 1)):
+            # Non-technical explanation
+            st.markdown("**What this query does (for business users):**")
+            st.info(query.get('explanation', 'No explanation provided'))
+
+            # SQL Query
+            st.markdown("**SQL Query:**")
+            st.code(query.get('sql_query', ''), language='sql')
+
+            # Priority
+            st.markdown(f"**Priority:** {priority_emoji} {priority.upper()}")
+
+    st.markdown("---")
+
+    # Accept all queries button
+    if st.button("✅ Accept All Queries & Execute", use_container_width=True, type="primary", key="execute_queries"):
+        with st.spinner("⚙️ Executing SQL queries and analyzing results..."):
+            # Execute queries
+            execution_result = issues_agent.execute_sql_queries(queries)
+
+            if not execution_result['success']:
+                st.error(f"❌ Query execution failed: {execution_result.get('error', 'Unknown error')}")
+                return
+
+            # Show execution summary
+            st.success(f"✅ Executed {execution_result['successful_queries']}/{execution_result['total_queries']} queries successfully!")
+
+            # Analyze results with Stage 1 agent
+            query_results = execution_result['results']
+            issues_result = issues_agent.identify_business_issues(query_results)
+
+            st.session_state.issues_cache = issues_result
+            st.session_state.query_results_cache = query_results  # Store for reference
+            st.rerun()
 
 
 def display_health_results(result):
@@ -302,36 +385,99 @@ def display_issues_results(result):
 
     # Display issues in grid
     for i, issue in enumerate(issues[:7], 1):  # Limit to 7
-        impact = issue.get("impact", "medium")
-        category = issue.get("category", "general")
+        severity = issue.get("severity", "medium")
+        category = issue.get("category", "operations")
 
-        impact_colors = {
-            "high": "🔴",
-            "medium": "🟡",
-            "low": "🟢"
+        severity_colors = {
+            "critical": "🔴",
+            "high": "🟠",
+            "medium": "🟡"
         }
 
         category_icons = {
-            "payment": "💳",
             "inventory": "📦",
-            "customer": "👥",
-            "financial": "💰",
-            "general": "⚠️"
+            "payments": "💳",
+            "customers": "👥",
+            "revenue": "💰",
+            "operations": "⚙️",
+            "data_quality": "📊",
+            "financial": "💵"
         }
 
-        emoji = impact_colors.get(impact, "⚪")
+        emoji = severity_colors.get(severity, "⚪")
         icon = category_icons.get(category, "⚠️")
 
         with st.container(border=True):
             st.markdown(f"### {icon} Issue #{i}: {issue.get('title', 'Unknown Issue')}")
-            st.markdown(f"**Impact:** {emoji} {impact.title()} | **Category:** {category.title()}")
-            st.markdown(f"**Affected:** {issue.get('affected_count', 'N/A')}")
+            st.markdown(f"**Severity:** {emoji} {severity.title()} | **Category:** {category.title()}")
+            if issue.get('affected_metrics'):
+                st.markdown(f"**Affected Metrics:** {', '.join(issue['affected_metrics'])}")
             st.markdown("---")
             st.markdown(issue.get('description', 'N/A'))
 
 
+def display_fixes_results(result):
+    """Display proposed fixes for identified issues"""
+    if not result["success"]:
+        st.error(f"❌ Fix generation failed: {result.get('error', 'Unknown error')}")
+        return
+
+    st.success("✅ Fix Proposals Generated!")
+    st.markdown("---")
+
+    st.subheader("🔧 Proposed Fixes")
+    st.caption(f"Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
+    st.caption(f"Model: {result['model']}")
+
+    fixes = result.get("data", {}).get("fixes", [])
+
+    if not fixes:
+        st.warning("No fixes could be generated at this time.")
+        return
+
+    # Display fixes in expandable cards
+    for i, fix in enumerate(fixes, 1):
+        priority = fix.get("priority", "scheduled")
+
+        priority_colors = {
+            "immediate": "🔴",
+            "urgent": "🟠",
+            "scheduled": "🟢"
+        }
+
+        emoji = priority_colors.get(priority, "⚪")
+
+        with st.expander(f"{emoji} Fix #{i}: {fix.get('fix_title', 'Unknown Fix')}", expanded=(i == 1)):
+            st.markdown(f"**Addressing Issue:** {fix.get('issue_id', 'N/A')}")
+            st.markdown(f"**Priority:** {emoji} {priority.title()}")
+
+            if fix.get('tools_to_use'):
+                tools_list = ", ".join([f"`{tool}`" for tool in fix['tools_to_use']])
+                st.markdown(f"**Tools to Use:** {tools_list}")
+
+            st.markdown("---")
+            st.markdown("**📋 What Needs to Be Done:**")
+            st.markdown(fix.get('fix_description', 'N/A'))
+
+            st.markdown("---")
+            st.markdown("**🔢 Action Steps:**")
+            for step_idx, step in enumerate(fix.get('action_steps', []), 1):
+                st.markdown(f"{step_idx}. {step}")
+
+            st.markdown("---")
+            st.markdown(f"**📈 Expected Outcome:** {fix.get('expected_outcome', 'N/A')}")
+
+            # Action button (placebo)
+            if st.button(f"✅ Execute Fix #{i}", key=f"execute_fix_{i}", type="primary"):
+                with st.spinner(f"Executing fix #{i}..."):
+                    import time
+                    time.sleep(2)
+                st.success(f"✅ Fix #{i} executed successfully!")
+                st.balloons()
+
+
 def display_fixes(fixes_result):
-    """Display suggested fixes"""
+    """Display suggested fixes (DEPRECATED - use display_fixes_results instead)"""
     st.markdown("---")
     st.subheader("🔧 Suggested Fixes & Actions")
 
