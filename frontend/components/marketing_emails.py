@@ -12,12 +12,29 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from services.marketing_service import MarketingService
+from services.ai_review_response_agent import AIReviewResponseAgent
 
 
 def render_marketing_emails():
     """Render the Marketing Emails page with customer segmentation and email generation"""
 
-    st.title("Marketing Emails")
+    st.title("Marketing & CRM")
+    st.caption("AI-powered customer segmentation, email campaigns, and review management")
+
+    # Create tabs
+    tab1, tab2 = st.tabs(["📧 Marketing Emails", "⭐ Review Responses"])
+
+    with tab1:
+        render_marketing_emails_tab()
+
+    with tab2:
+        render_review_responses_tab()
+
+
+def render_marketing_emails_tab():
+    """Render the Marketing Emails tab with customer segmentation and email generation"""
+
+    st.subheader("Marketing Emails")
     st.caption("AI-powered customer segmentation and personalized email campaigns")
 
     # Initialize service
@@ -71,7 +88,7 @@ def render_marketing_emails():
 
     if segment_type == 'low_spend':
         with st.spinner("Loading lowest purchasing customers..."):
-            customers_df = marketing.get_lowest_purchasing_customers(limit=100)
+            customers_df = marketing.get_lowest_purchasing_customers(limit=15)
             if not customers_df.empty:
                 st.caption(f"📊 Found {len(customers_df)} customers with lowest spending")
                 display_df = customers_df.copy()
@@ -84,7 +101,7 @@ def render_marketing_emails():
 
     elif segment_type == 'best':
         with st.spinner("Loading best customers..."):
-            customers_df = marketing.get_best_customers(limit=100)
+            customers_df = marketing.get_best_customers(limit=10)
             if not customers_df.empty:
                 st.caption(f"📊 Found {len(customers_df)} top customers")
                 display_df = customers_df.copy()
@@ -262,3 +279,231 @@ def render_marketing_emails():
                     - Estimated Click Rate: 8-12%
                     - Campaign ID: #{datetime.now().strftime('%Y%m%d%H%M%S')}
                     """)
+
+
+def render_review_responses_tab():
+    """Render the Review Responses tab with 5 category boxes for classified reviews"""
+
+    st.subheader("Review Response Management")
+    st.caption("AI-powered sentiment analysis and automated review response generation")
+
+    # Initialize service
+    try:
+        review_agent = AIReviewResponseAgent()
+    except Exception as e:
+        st.error(f"Failed to connect to services: {e}")
+        st.info("Make sure your .env file has SUPABASE_URL, SUPABASE_SECRET_KEY, and GEMINI_API_KEY set correctly.")
+        return
+
+    st.markdown("---")
+
+    # Load and analyze reviews
+    if st.button("🔄 Analyze All Reviews", type="primary"):
+        with st.spinner("Analyzing reviews with sentiment analysis..."):
+            st.session_state.reviews_df = review_agent.analyze_all_reviews()
+            if not st.session_state.reviews_df.empty:
+                st.success(f"✅ Analyzed {len(st.session_state.reviews_df)} reviews!")
+            else:
+                st.warning("No reviews found in the database.")
+
+    st.markdown("---")
+
+    # Display 5 category boxes
+    if 'reviews_df' in st.session_state and not st.session_state.reviews_df.empty:
+        reviews_df = st.session_state.reviews_df
+
+        st.subheader("Review Categories")
+        st.caption("Reviews classified by sentiment and star rating")
+
+        # Define category information
+        categories = {
+            "low_sentiment_low_stars": {
+                "title": "🔴 Low Sentiment + Low Stars",
+                "description": "Critical reviews that need comprehensive response",
+                "color": "#DC2626"
+            },
+            "low_sentiment_high_stars": {
+                "title": "🟡 Low Sentiment + High Stars",
+                "description": "Good ratings with concerning feedback",
+                "color": "#F59E0B"
+            },
+            "high_sentiment_high_stars": {
+                "title": "🟢 High Sentiment + High Stars",
+                "description": "Excellent reviews to celebrate",
+                "color": "#10B981"
+            },
+            "high_sentiment_low_stars": {
+                "title": "🟠 High Sentiment + Low Stars",
+                "description": "Positive feedback but low rating",
+                "color": "#F97316"
+            },
+            "medium_reviews": {
+                "title": "🔵 Medium Reviews (3-4 Stars)",
+                "description": "Standard reviews with generic responses",
+                "color": "#3B82F6"
+            }
+        }
+
+        # Display category boxes in rows
+        for idx, (category_key, category_info) in enumerate(categories.items()):
+            category_reviews = reviews_df[reviews_df['category'] == category_key]
+            count = len(category_reviews)
+
+            # Create expandable section for each category
+            with st.expander(f"{category_info['title']} ({count} reviews)", expanded=(count > 0 and idx == 0)):
+                if count > 0:
+                    # Display category stats
+                    col1, col2, col3, col4 = st.columns([2, 2, 2, 3])
+                    with col1:
+                        avg_rating = category_reviews['star_rating'].mean()
+                        st.metric("Avg Rating", f"{avg_rating:.1f} ⭐")
+                    with col2:
+                        avg_sentiment = category_reviews['sentiment_score'].mean()
+                        st.metric("Avg Sentiment", f"{avg_sentiment:.2f}")
+                    with col3:
+                        st.metric("Total Reviews", count)
+                    with col4:
+                        # Generate Responses button for this category
+                        if st.button(f"🤖 Generate Responses (max 20)", key=f"batch_gen_{category_key}", type="primary", use_container_width=True):
+                            with st.spinner(f"Generating responses for {category_info['title']}..."):
+                                batch_results = review_agent.generate_batch_responses(
+                                    reviews_df=reviews_df,
+                                    category=category_key,
+                                    limit=20
+                                )
+                                st.session_state[f'batch_results_{category_key}'] = batch_results
+                                st.session_state[f'show_popup_{category_key}'] = True
+                                st.rerun()
+
+                    st.markdown("---")
+
+                    # Show sample reviews (first 3)
+                    st.caption(f"**Sample Reviews (showing first 3 of {count}):**")
+                    for idx, (_, review) in enumerate(category_reviews.head(3).iterrows()):
+                        st.markdown(f"**{review['customer_name']}** - {review['star_rating']} ⭐ (Sentiment: {review['sentiment_score']:.2f})")
+                        st.markdown(f"_{review['review_text']}_")
+                        st.markdown("---")
+
+                else:
+                    st.info(f"No reviews in this category.")
+
+        # Display popup modal for batch results
+        for category_key, category_info in categories.items():
+            if st.session_state.get(f'show_popup_{category_key}', False):
+                render_batch_results_popup(category_key, category_info)
+
+    else:
+        st.info("👆 Click 'Analyze All Reviews' to load and classify reviews by sentiment.")
+
+
+@st.dialog(title="Review Responses", width="large")
+def render_batch_results_popup(category_key, category_info):
+    """Render a popup with editable table for batch-generated responses"""
+
+    st.markdown(f"### {category_info['title']}")
+    st.caption("Review and edit the AI-generated responses before sending")
+
+    batch_results = st.session_state.get(f'batch_results_{category_key}', [])
+
+    if not batch_results:
+        st.warning("No results to display.")
+        if st.button("Close"):
+            st.session_state[f'show_popup_{category_key}'] = False
+            st.rerun()
+        return
+
+    # Create editable dataframe
+    st.markdown("**Generated Responses:**")
+    st.caption(f"✏️ Click on any cell to edit the response text. Changes are saved automatically.")
+
+    # Prepare data for editable table
+    table_data = []
+    for result in batch_results:
+        table_data.append({
+            'Review ID': result['review_id'],
+            'First Name': result['first_name'],
+            'Last Name': result['last_name'],
+            'Rating': f"{result['star_rating']} ⭐",
+            'Sentiment': f"{result['sentiment_score']:.2f}",
+            'Review': result['review_text'][:100] + '...' if len(result['review_text']) > 100 else result['review_text'],
+            'Proposed Response': result['response_text']
+        })
+
+    # Create DataFrame
+    responses_df = pd.DataFrame(table_data)
+
+    # Display editable data editor
+    edited_df = st.data_editor(
+        responses_df,
+        use_container_width=True,
+        hide_index=True,
+        num_rows="fixed",
+        column_config={
+            "Review ID": st.column_config.TextColumn("Review ID", disabled=True, width="small"),
+            "First Name": st.column_config.TextColumn("First Name", disabled=True, width="small"),
+            "Last Name": st.column_config.TextColumn("Last Name", disabled=True, width="small"),
+            "Rating": st.column_config.TextColumn("Rating", disabled=True, width="small"),
+            "Sentiment": st.column_config.TextColumn("Sentiment", disabled=True, width="small"),
+            "Review": st.column_config.TextColumn("Review", disabled=True, width="medium"),
+            "Proposed Response": st.column_config.TextColumn("Proposed Response", width="large")
+        },
+        height=400
+    )
+
+    st.markdown("---")
+
+    # Action buttons
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+
+    with col1:
+        st.caption(f"**{len(batch_results)} responses generated**")
+        success_count = sum(1 for r in batch_results if r['status'] == 'success')
+        failed_count = sum(1 for r in batch_results if r['status'] == 'failed')
+        if failed_count > 0:
+            st.warning(f"⚠️ {failed_count} responses failed to generate")
+
+    with col2:
+        if st.button("📥 Download CSV", use_container_width=True):
+            csv = edited_df.to_csv(index=False)
+            st.download_button(
+                label="Download",
+                data=csv,
+                file_name=f"review_responses_{category_key}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+
+    with col3:
+        if st.button("📤 Send All", type="primary", use_container_width=True):
+            # Update batch results with edited responses
+            for idx, result in enumerate(batch_results):
+                result['response_text'] = edited_df.iloc[idx]['Proposed Response']
+
+            # Placebo send action
+            with st.spinner("Sending responses..."):
+                import time
+                time.sleep(2)
+
+            st.success(f"✅ Sent {success_count} responses successfully!")
+            st.balloons()
+
+            # Clear the popup state
+            st.session_state[f'show_popup_{category_key}'] = False
+            st.session_state[f'batch_results_{category_key}'] = []
+
+            # Show success message
+            st.info(f"""
+            📊 **Send Summary**
+            - Responses Sent: {success_count}
+            - Failed: {failed_count}
+            - Category: {category_info['title']}
+            - Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+            """)
+
+            time.sleep(2)
+            st.rerun()
+
+    with col4:
+        if st.button("❌ Cancel", use_container_width=True):
+            st.session_state[f'show_popup_{category_key}'] = False
+            st.session_state[f'batch_results_{category_key}'] = []
+            st.rerun()

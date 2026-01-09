@@ -1,11 +1,13 @@
 """
 AI Review Response Agent
 Analyzes customer reviews using sentiment analysis and generates appropriate responses
-Uses TextBlob for sentiment analysis and Gemini 2.0 Flash-Lite for response generation
+Uses TextBlob for sentiment analysis and Gemini for response generation
 """
 
 import os
 import re
+import random
+import logging
 from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -13,11 +15,15 @@ import pandas as pd
 from textblob import TextBlob
 from google import genai
 from google.genai import types
+from langfuse import observe
 from services.schemas.review_agent_schemas import ReviewResponseOutput
 
 load_dotenv()
 
+# Silence OpenTelemetry (Langfuse) errors
+logging.getLogger("opentelemetry.sdk._shared_internal").setLevel(logging.CRITICAL)
 
+MODEL=os.getenv("GEMINI_MODEL")
 class AIReviewResponseAgent:
     """AI agent for analyzing reviews and generating appropriate responses"""
 
@@ -53,6 +59,7 @@ class AIReviewResponseAgent:
             print(f"Failed to connect to services: {e}")
             raise
 
+    @observe()
     def _analyze_sentiment(self, text: str) -> float:
         """
         Analyze sentiment of review text using TextBlob
@@ -154,6 +161,7 @@ class AIReviewResponseAgent:
         validated_response = ReviewResponseOutput(**response_data)
         return validated_response.model_dump()
 
+    @observe()
     def generate_review_response(
         self,
         review_text: str,
@@ -264,7 +272,7 @@ class AIReviewResponseAgent:
 
 **Requirements:**
 1. Address the customer by their first name
-2. Keep response between 50-200 words
+2. Keep response between 15-40 words
 3. Be genuine, personal, and specific to their review
 4. Match the specified tone perfectly
 5. If support contact is required, include: support@mistyjazzrecords.com
@@ -284,7 +292,7 @@ INCLUDES_SUPPORT: {'true' if guidelines['include_support'] else 'false'}
 CRITICAL FORMATTING RULES:
 - Wrap entire response in a text code block (```text ... ```)
 - Use EXACTLY the labels: RESPONSE:, TONE:, INCLUDES_SUPPORT:
-- Response must be 50-200 words
+- Response must be 15-40 words
 - Be specific to THIS review, not generic
 - Do NOT include extra commentary outside the code block
 """
@@ -308,7 +316,7 @@ CRITICAL FORMATTING RULES:
                 )
 
                 response = self.gemini_client.models.generate_content(
-                    model='gemini-2.0-flash-lite',  # Using Flash-Lite as requested
+                    model=MODEL,  
                     contents=response_prompt,
                     config=generation_config
                 )
@@ -320,16 +328,23 @@ CRITICAL FORMATTING RULES:
 
             except Exception as e:
                 last_error = e
-                print(f"Attempt {attempt + 1}/{max_retries} failed for review response: {e}")
+                error_msg = str(e)
+                print(f"Attempt {attempt + 1}/{max_retries} failed for review response: {error_msg}")
+
+                # Print more detailed error information
+                import traceback
+                print(f"Detailed error: {traceback.format_exc()}")
+
                 if attempt < max_retries - 1:
                     print(f"Retrying response generation...")
                     continue
                 else:
-                    print(f"All {max_retries} attempts failed. Last error: {e}")
+                    print(f"All {max_retries} attempts failed. Last error: {error_msg}")
                     return None
 
         return None
 
+    @observe()
     def analyze_all_reviews(self) -> pd.DataFrame:
         """
         Analyze all reviews with TextBlob sentiment analysis and classify them
@@ -398,15 +413,130 @@ CRITICAL FORMATTING RULES:
 
     def generate_medium_review_responses(self) -> List[str]:
         """
-        Generate generic positive responses for medium reviews (3-4 stars)
+        Generate generic positive response templates for medium reviews (3-4 stars)
 
         Returns:
-            List of generic response templates
+            List of response template strings
         """
-        return [
+        responses = [
             "Thank you for taking the time to share your thoughts! We're glad you enjoyed your purchase and hope it brings many hours of listening pleasure. Feel free to explore more gems in our collection!",
             "We appreciate your feedback and are thrilled to have you as part of the Misty Jazz Records family. If you ever need recommendations, we're here to help you discover your next favorite album!",
             "Thanks for your review! We're always working to improve and provide the best vinyl experience. We hope you'll continue to explore our curated jazz collection.",
             "We value your feedback and are happy you're enjoying your new vinyl. Our catalog is constantly growing with rare finds and timeless classics - happy listening!",
-            "Thank you for your support! We're committed to bringing you the finest jazz vinyl selections. Don't hesitate to reach out if you need any recommendations for your next purchase."
+            "Thank you for your support! We're committed to bringing you the finest jazz vinyl selections. Don't hesitate to reach out if you need any recommendations for your next purchase.",
+            "We appreciate you sharing your experience with us! Your feedback helps us continue to provide quality vinyl records. We hope you enjoy your new albums!",
+            "Thanks for your review! We're glad you're part of our jazz-loving community. Feel free to reach out if you need any recommendations for your next purchase.",
+            "Thank you for your feedback! We value every customer's opinion and are always striving to improve. Happy listening!"
         ]
+
+        return responses
+
+    @observe()
+    def generate_batch_responses(
+        self,
+        reviews_df: pd.DataFrame,
+        category: str,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate responses for a batch of reviews in a specific category
+
+        Args:
+            reviews_df: DataFrame containing reviews to process
+            category: Review category to generate responses for
+            limit: Maximum number of reviews to process (default 10)
+
+        Returns:
+            List of dictionaries containing review info and generated responses
+        """
+        results = []
+
+        # Filter reviews by category and limit
+        category_reviews = reviews_df[reviews_df['category'] == category].head(limit)
+
+        print(f"Generating responses for {len(category_reviews)} reviews in category '{category}'...")
+
+        for _, review in category_reviews.iterrows():
+            try:
+                # For medium reviews, use pre-generated templates
+                if category == "medium_reviews":
+                    medium_responses = self.generate_medium_review_responses()
+                    selected_response_text = random.choice(medium_responses)
+
+                    result = {
+                        'review_id': review['review_id'],
+                        'customer_name': review['customer_name'],
+                        'first_name': review['first_name'],
+                        'last_name': review['customer_name'].split()[-1] if ' ' in review['customer_name'] else review['customer_name'],
+                        'star_rating': review['star_rating'],
+                        'sentiment_score': review['sentiment_score'],
+                        'review_text': review['review_text'],
+                        'response_text': selected_response_text,
+                        'attributed_to': 'Template',
+                        'tone': 'positive',
+                        'includes_support_contact': False,
+                        'status': 'success'
+                    }
+                else:
+                    # Generate custom AI response
+                    response = self.generate_review_response(
+                        review_text=review['review_text'],
+                        star_rating=review['star_rating'],
+                        customer_name=review['first_name'],
+                        category=category,
+                        sentiment_score=review['sentiment_score']
+                    )
+
+                    if response:
+                        result = {
+                            'review_id': review['review_id'],
+                            'customer_name': review['customer_name'],
+                            'first_name': review['first_name'],
+                            'last_name': review['customer_name'].split()[-1] if ' ' in review['customer_name'] else review['customer_name'],
+                            'star_rating': review['star_rating'],
+                            'sentiment_score': review['sentiment_score'],
+                            'review_text': review['review_text'],
+                            'response_text': response['response_text'],
+                            'attributed_to': 'AI Generated',
+                            'tone': response['tone'],
+                            'includes_support_contact': response['includes_support_contact'],
+                            'status': 'success'
+                        }
+                    else:
+                        result = {
+                            'review_id': review['review_id'],
+                            'customer_name': review['customer_name'],
+                            'first_name': review['first_name'],
+                            'last_name': review['customer_name'].split()[-1] if ' ' in review['customer_name'] else review['customer_name'],
+                            'star_rating': review['star_rating'],
+                            'sentiment_score': review['sentiment_score'],
+                            'review_text': review['review_text'],
+                            'response_text': 'Failed to generate response',
+                            'attributed_to': 'Error',
+                            'tone': 'error',
+                            'includes_support_contact': False,
+                            'status': 'failed'
+                        }
+
+                results.append(result)
+                print(f"Processed review {len(results)}/{len(category_reviews)}")
+
+            except Exception as e:
+                print(f"Error processing review {review['review_id']}: {e}")
+                result = {
+                    'review_id': review['review_id'],
+                    'customer_name': review['customer_name'],
+                    'first_name': review['first_name'],
+                    'last_name': review['customer_name'].split()[-1] if ' ' in review['customer_name'] else review['customer_name'],
+                    'star_rating': review['star_rating'],
+                    'sentiment_score': review['sentiment_score'],
+                    'review_text': review['review_text'],
+                    'response_text': f'Error: {str(e)}',
+                    'attributed_to': 'Error',
+                    'tone': 'error',
+                    'includes_support_contact': False,
+                    'status': 'failed'
+                }
+                results.append(result)
+
+        return results

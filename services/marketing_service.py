@@ -6,6 +6,7 @@ Handles customer segmentation and email campaign data for marketing purposes
 import os
 import re
 import json
+import logging
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -13,9 +14,14 @@ import pandas as pd
 from datetime import datetime, timedelta
 from google import genai
 from google.genai import types
+from langfuse import observe
 from services.schemas.marketing_schemas import MarketingEmailOutput
 
 load_dotenv()
+
+# Silence OpenTelemetry (Langfuse) errors
+logging.getLogger("opentelemetry.sdk._shared_internal").setLevel(logging.CRITICAL)
+
 MODEL=os.getenv("GEMINI_MODEL")
 class MarketingService:
     """Handle marketing-specific queries and email generation"""
@@ -93,6 +99,7 @@ class MarketingService:
 
     # ============ CUSTOMER SEGMENTATION QUERIES ============
 
+    @observe()
     def get_lowest_purchasing_customers(self, limit: int = 15) -> pd.DataFrame:
         """
         Get customers with lowest total spending
@@ -160,6 +167,7 @@ class MarketingService:
             print(f"Error in get_lowest_purchasing_customers: {e}")
             return pd.DataFrame()
 
+    @observe()
     def get_best_customers(self, limit: int = 10) -> pd.DataFrame:
         """
         Get best customers by total spending
@@ -215,6 +223,7 @@ class MarketingService:
             print(f"Error in get_best_customers: {e}")
             return pd.DataFrame()
 
+    @observe()
     def get_genre_specific_customers(self, genre_name: Optional[str] = None, limit: int = 50) -> pd.DataFrame:
         """
         Get customers who have purchased albums from specific genres
@@ -319,6 +328,7 @@ class MarketingService:
             print(f"Error in get_genre_specific_customers: {e}")
             return pd.DataFrame()
 
+    @observe()
     def get_available_genres(self) -> List[str]:
         """Get list of all available genres"""
         try:
@@ -332,6 +342,7 @@ class MarketingService:
 
     # ============ EMAIL GENERATION ============
 
+    @observe()
     def generate_marketing_email(
         self,
         segment_type: str,
