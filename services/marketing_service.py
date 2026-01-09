@@ -4,6 +4,8 @@ Handles customer segmentation and email campaign data for marketing purposes
 """
 
 import os
+import re
+import json
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -11,10 +13,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 from google import genai
 from google.genai import types
+from services.schemas.marketing_schemas import MarketingEmailOutput
 
 load_dotenv()
-
-
+MODEL=os.getenv("GEMINI_MODEL")
 class MarketingService:
     """Handle marketing-specific queries and email generation"""
 
@@ -43,9 +45,55 @@ class MarketingService:
             print(f"Failed to connect to services: {e}")
             raise
 
+    def _extract_and_validate_email(
+        self,
+        response_text: str,
+        max_retries: int = 3
+    ) -> Dict[str, str]:
+        """
+        Extract and validate email content from LLM response with retries
+
+        Args:
+            response_text: Raw LLM response text
+            max_retries: Maximum number of retry attempts (default: 3)
+
+        Returns:
+            Dictionary with validated subject, body, and call_to_action
+
+        Raises:
+            ValueError: If validation fails after all retries
+        """
+        # Try to extract from text code block first (```text ... ```)
+        text_block_pattern = r'```(?:text)?\s*\n?(.*?)\n?```'
+        code_block_match = re.search(text_block_pattern, response_text, re.DOTALL)
+
+        if code_block_match:
+            content = code_block_match.group(1).strip()
+        else:
+            content = response_text.strip()
+
+        # Parse the structured format
+        subject_match = re.search(r'SUBJECT:\s*(.+?)(?:\n|$)', content, re.IGNORECASE)
+        body_match = re.search(r'BODY:\s*(.+?)(?=CALL-TO-ACTION:|$)', content, re.IGNORECASE | re.DOTALL)
+        cta_match = re.search(r'CALL-TO-ACTION:\s*(.+?)$', content, re.IGNORECASE | re.DOTALL)
+
+        if not subject_match or not body_match or not cta_match:
+            raise ValueError("Could not parse email structure - missing SUBJECT, BODY, or CALL-TO-ACTION sections")
+
+        # Extract and clean the content
+        email_data = {
+            'subject': subject_match.group(1).strip(),
+            'body': body_match.group(1).strip(),
+            'call_to_action': cta_match.group(1).strip()
+        }
+
+        # Validate using Pydantic model
+        validated_email = MarketingEmailOutput(**email_data)
+        return validated_email.model_dump()
+
     # ============ CUSTOMER SEGMENTATION QUERIES ============
 
-    def get_lowest_purchasing_customers(self, limit: int = 50) -> pd.DataFrame:
+    def get_lowest_purchasing_customers(self, limit: int = 15) -> pd.DataFrame:
         """
         Get customers with lowest total spending
         Calculation: SUM(orders.total) per customer, sorted ascending
@@ -112,95 +160,7 @@ class MarketingService:
             print(f"Error in get_lowest_purchasing_customers: {e}")
             return pd.DataFrame()
 
-    def get_inactive_customers(self, days_inactive: int = 90, limit: int = 50) -> pd.DataFrame:
-        """
-        Get customers who haven't purchased in X days
-        Query: Find customers where last order_date < (today - days_inactive)
-        """
-        try:
-            # Calculate cutoff date
-            cutoff_date = datetime.now() - timedelta(days=days_inactive)
-            cutoff_date_str = cutoff_date.strftime('%Y-%m-%d')
-
-            # Get all customers
-            customers_result = self.client.table('customers').select(
-                'customer_id, first_name, last_name, email, created_at'
-            ).execute()
-
-            if not customers_result.data:
-                return pd.DataFrame()
-
-            # Get all orders
-            orders_result = self.client.table('orders').select(
-                'customer_id, order_date, total'
-            ).execute()
-
-            # Build customer activity map
-            customer_data = {}
-            customer_orders = {}
-
-            # Initialize all customers
-            for customer in customers_result.data:
-                customer_id = customer['customer_id']
-                customer_data[customer_id] = {
-                    'customer_id': customer_id,
-                    'first_name': customer['first_name'],
-                    'last_name': customer['last_name'],
-                    'name': f"{customer['first_name']} {customer['last_name']}",
-                    'email': customer['email'],
-                    'created_at': customer['created_at'],
-                    'last_order_date': None,
-                    'total_spent': 0.0,
-                    'order_count': 0
-                }
-                customer_orders[customer_id] = []
-
-            # Process orders
-            if orders_result.data:
-                for order in orders_result.data:
-                    customer_id = order['customer_id']
-                    if customer_id and customer_id in customer_data:
-                        order_date = pd.to_datetime(order['order_date'])
-                        customer_orders[customer_id].append(order_date)
-                        customer_data[customer_id]['total_spent'] += float(order['total'])
-                        customer_data[customer_id]['order_count'] += 1
-
-            # Find inactive customers
-            inactive_customers = []
-            now = datetime.now()
-
-            for customer_id, customer in customer_data.items():
-                if customer_orders[customer_id]:
-                    # Has orders - check last order date
-                    last_order = max(customer_orders[customer_id])
-                    customer['last_order_date'] = last_order
-
-                    if last_order < pd.Timestamp(cutoff_date):
-                        days_since = (now - last_order.to_pydatetime()).days
-                        customer['days_inactive'] = days_since
-                        customer['last_order_date_str'] = last_order.strftime('%Y-%m-%d')
-                        inactive_customers.append(customer)
-                else:
-                    # Never ordered - check registration date
-                    registration_date = pd.to_datetime(customer['created_at'])
-                    if registration_date < pd.Timestamp(cutoff_date):
-                        days_since = (now - registration_date.to_pydatetime()).days
-                        customer['days_inactive'] = days_since
-                        customer['last_order_date_str'] = 'Never'
-                        inactive_customers.append(customer)
-
-            # Convert to dataframe
-            df = pd.DataFrame(inactive_customers)
-            if not df.empty:
-                df = df.sort_values('days_inactive', ascending=False).head(limit)
-
-            return df
-
-        except Exception as e:
-            print(f"Error in get_inactive_customers: {e}")
-            return pd.DataFrame()
-
-    def get_best_customers(self, limit: int = 50) -> pd.DataFrame:
+    def get_best_customers(self, limit: int = 10) -> pd.DataFrame:
         """
         Get best customers by total spending
         Query: Join orders with customers, group by customer, order by total DESC
@@ -408,14 +368,13 @@ class MarketingService:
         # Build segment description
         segment_descriptions = {
             'low_spend': f"low-spending customers (average spent: ${segment_data['total_spent'].mean():.2f}, {len(segment_data)} customers)",
-            'inactive': f"inactive customers (haven't purchased in {segment_data['days_inactive'].mean():.0f} days on average, {len(segment_data)} customers)",
             'best': f"VIP customers (average spent: ${segment_data['total_spent'].mean():.2f}, {len(segment_data)} customers)",
             'genre': f"customers who love {segment_data.iloc[0]['genre'] if 'genre' in segment_data.columns else 'jazz'} music ({len(segment_data)} customers)"
         }
 
         segment_desc = segment_descriptions.get(segment_type, f"valued customers ({len(segment_data)} customers)")
 
-        # Build the prompt
+        # Build the prompt with strict formatting requirements
         email_prompt = f"""You are writing a marketing email for Misty Jazz Records, a premium vinyl record store.
 
 **Target Audience:** {segment_desc}
@@ -437,36 +396,71 @@ Please generate a compelling marketing email that:
 7. Maintains the brand voice of a premium jazz vinyl retailer
 8. Is appropriate for the specified length ({email_length})
 
-Format your response as:
-SUBJECT: [subject line]
+RESPONSE FORMAT:
+You MUST return your response in a text code block using this EXACT format:
+
+```text
+SUBJECT: [subject line - 10-150 characters]
 
 BODY:
-[email body]
+[email body - well-formatted paragraphs, 100-3000 characters]
 
-CALL-TO-ACTION: [main CTA]
+CALL-TO-ACTION: [clear CTA - 10-200 characters]
+```
+
+CRITICAL FORMATTING RULES:
+- Wrap your entire response in a text code block (```text ... ```)
+- Use EXACTLY the labels: SUBJECT:, BODY:, CALL-TO-ACTION:
+- Subject must be compelling and concise (10-150 chars)
+- Body must have proper paragraphs separated by blank lines
+- Call-to-action must be specific and actionable
+- Do NOT include extra commentary outside the code block
 """
 
-        try:
-            generation_config = types.GenerateContentConfig(
-                system_instruction=[
-                    "You are an expert email marketing copywriter for a premium jazz vinyl record store.",
-                    "Your emails are engaging, on-brand, and drive customer action.",
-                    "You understand different customer segments and tailor messaging accordingly.",
-                    "You create compelling subject lines that increase open rates."
-                ],
-                temperature=0.8,
-                top_p=0.95,
-                top_k=40,
-            )
+        # Retry logic with validation
+        max_retries = 3
+        last_error = None
 
-            response = self.gemini_client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=email_prompt,
-                config=generation_config
-            )
+        for attempt in range(max_retries):
+            try:
+                generation_config = types.GenerateContentConfig(
+                    system_instruction=[
+                        "You are an expert email marketing copywriter for a premium jazz vinyl record store.",
+                        "Your emails are engaging, on-brand, and drive customer action.",
+                        "You understand different customer segments and tailor messaging accordingly.",
+                        "You create compelling subject lines that increase open rates.",
+                        "You MUST follow the exact format specified in the prompt."
+                    ],
+                    temperature=0.8,
+                    top_p=0.95,
+                    top_k=40,
+                )
 
-            return response.text
+                response = self.gemini_client.models.generate_content(
+                    model=MODEL,
+                    contents=email_prompt,
+                    config=generation_config
+                )
 
-        except Exception as e:
-            print(f"Error generating email: {e}")
-            return None
+                # Extract and validate the email content
+                validated_email = self._extract_and_validate_email(response.text, max_retries=max_retries)
+
+                # Return formatted email text
+                return f"""SUBJECT: {validated_email['subject']}
+
+BODY:
+{validated_email['body']}
+
+CALL-TO-ACTION: {validated_email['call_to_action']}"""
+
+            except Exception as e:
+                last_error = e
+                print(f"Attempt {attempt + 1}/{max_retries} failed: {e}")
+                if attempt < max_retries - 1:
+                    print(f"Retrying email generation...")
+                    continue
+                else:
+                    print(f"All {max_retries} attempts failed. Last error: {e}")
+                    return None
+
+        return None

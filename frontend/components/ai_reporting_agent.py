@@ -373,6 +373,117 @@ def display_fixes(fixes_result):
             st.markdown(fix.get('description', 'N/A'))
 
 
+def display_action_preview_dialog(issue_num, issue, fix_result, ai_agent):
+    """Display a preview dialog showing the template that will be sent"""
+    st.markdown("---")
+    st.markdown(f"### 📧 Preview Action for Issue #{issue_num}")
+
+    if not fix_result or not fix_result.get('success'):
+        st.error("No fix data available for preview.")
+        return
+
+    fixes = fix_result.get("data", {}).get("fixes", [])
+    if not fixes:
+        st.error("No fix information found.")
+        return
+
+    fix = fixes[0]
+    tool_to_use = fix.get('tool_to_use', 'manual')
+
+    # Generate preview based on the tool being used
+    preview_content = None
+    preview_title = "Action Preview"
+
+    if 'email' in tool_to_use.lower():
+        preview_title = "📧 Email Template Preview"
+        # This is a placeholder - in real implementation, you'd call the actual tool
+        preview_content = f"""
+**Subject:** Action Required - {issue.get('title', 'Issue')}
+
+Dear Team,
+
+{fix.get('description', 'No description available.')}
+
+This action will be performed automatically.
+
+Best regards,
+Misty Jazz Records AI System
+"""
+    elif 'cancel' in tool_to_use.lower():
+        preview_title = "🚫 Transaction Cancellation Preview"
+        preview_content = f"""
+**Transaction Cancellation Notice**
+
+Issue: {issue.get('title', 'N/A')}
+Action: Cancel transaction
+Reason: {issue.get('description', 'Business issue resolution')}
+
+Affected transactions will be marked as cancelled in the system.
+"""
+    elif 'inventory' in tool_to_use.lower():
+        preview_title = "📦 Inventory Alert Preview"
+        preview_content = f"""
+**Inventory Alert Email**
+
+To: inventory@mistyjazzrecords.com
+Subject: {issue.get('title', 'Inventory Alert')}
+
+{fix.get('description', 'No description available.')}
+
+This alert will be sent to the inventory management team.
+"""
+    else:
+        preview_title = "⚙️ Manual Action Preview"
+        preview_content = f"""
+**Manual Action Required**
+
+{fix.get('description', 'No description available.')}
+
+Please follow the steps outlined above.
+"""
+
+    # Display the preview in a container
+    with st.container(border=True):
+        st.markdown(f"#### {preview_title}")
+        st.markdown("---")
+
+        if preview_content:
+            st.text_area(
+                "Preview:",
+                preview_content,
+                height=300,
+                disabled=True,
+                key=f"preview_content_{issue_num}"
+            )
+
+        st.markdown("")
+        st.info("ℹ️ This is a preview. Click 'Send' to execute the action (demonstration only).")
+
+        # Action buttons
+        col1, col2, col3 = st.columns([1, 1, 1])
+
+        with col1:
+            if st.button("❌ Cancel", use_container_width=True, key=f"cancel_preview_{issue_num}"):
+                st.session_state[f'show_preview_{issue_num}'] = False
+                st.rerun()
+
+        with col3:
+            if st.button("📤 Send", use_container_width=True, type="primary", key=f"send_action_{issue_num}"):
+                # Placebo action - just show success and close
+                st.session_state[f'show_preview_{issue_num}'] = False
+                st.session_state[f'fix_applied_{issue_num}'] = True
+                st.rerun()
+
+    # Show success message after sending
+    if st.session_state.get(f'fix_applied_{issue_num}'):
+        st.success(f"✅ Action executed successfully for Issue #{issue_num}!")
+        st.balloons()
+        # Clear the applied flag after showing success
+        if st.button("👍 Acknowledge", key=f"ack_{issue_num}"):
+            st.session_state[f'fix_applied_{issue_num}'] = False
+            st.rerun()
+
+
 def display_issues_with_fix_buttons(result, ai_agent):
     """Display issues with individual fix problem buttons"""
     if not result["success"]:
@@ -490,14 +601,11 @@ def display_issues_with_fix_buttons(result, ai_agent):
 
                         with col_z:
                             if st.button("✅ Accept and Take Action", use_container_width=True, type="primary", key=f"apply_fix_{i}"):
-                                st.session_state[f'fix_applied_{i}'] = True
+                                # Show preview template dialog
+                                st.session_state[f'show_preview_{i}'] = True
                                 st.session_state[f'show_fix_{i}'] = False
                                 st.rerun()
 
-                    if st.session_state.get(f'fix_applied_{i}'):
-                        st.success(f"✅ Fix successfully applied for Issue #{i}!")
-                        st.balloons()
-                        # Clear the applied flag after showing success
-                        if st.button("👍 Acknowledge", key=f"ack_{i}"):
-                            st.session_state[f'fix_applied_{i}'] = False
-                            st.rerun()
+            # Show preview template dialog if needed
+            if st.session_state.get(f'show_preview_{i}'):
+                display_action_preview_dialog(i, issue, fix_result, ai_agent)

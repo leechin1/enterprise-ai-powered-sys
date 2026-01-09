@@ -34,7 +34,7 @@ def render_marketing_emails():
     st.subheader("1. Customer Segmentation")
     st.caption("Select a customer segment to target with your marketing campaign")
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         if st.button("💸 Lowest Purchasing", use_container_width=True,
@@ -45,14 +45,6 @@ def render_marketing_emails():
             st.rerun()
 
     with col2:
-        if st.button("💤 Inactive Customers", use_container_width=True,
-                    type="primary" if st.session_state.get('segment_type') == 'inactive' else "secondary",
-                    help="Customers who haven't purchased in a long time"):
-            st.session_state.segment_type = 'inactive'
-            st.session_state.selected_customers = None
-            st.rerun()
-
-    with col3:
         if st.button("⭐ Best Customers", use_container_width=True,
                     type="primary" if st.session_state.get('segment_type') == 'best' else "secondary",
                     help="Top spending customers - great for VIP campaigns"):
@@ -60,7 +52,7 @@ def render_marketing_emails():
             st.session_state.selected_customers = None
             st.rerun()
 
-    with col4:
+    with col3:
         if st.button("🎵 Genre Specific", use_container_width=True,
                     type="primary" if st.session_state.get('segment_type') == 'genre' else "secondary",
                     help="Customers who prefer specific genres"):
@@ -89,20 +81,6 @@ def render_marketing_emails():
             else:
                 st.info("No customers found in this segment")
 
-    elif segment_type == 'inactive':
-        # Add slider for days inactive
-        days_inactive = st.slider("Days since last purchase", 30, 365, 90, 30)
-
-        with st.spinner(f"Loading customers inactive for {days_inactive}+ days..."):
-            customers_df = marketing.get_inactive_customers(days_inactive=days_inactive, limit=100)
-            if not customers_df.empty:
-                st.caption(f"📊 Found {len(customers_df)} inactive customers")
-                display_df = customers_df.copy()
-                display_df['total_spent'] = display_df['total_spent'].apply(lambda x: f"${x:,.2f}")
-                display_df = display_df[['name', 'email', 'days_inactive', 'last_order_date_str', 'total_spent', 'order_count']]
-                display_df.columns = ['Name', 'Email', 'Days Inactive', 'Last Order', 'Total Spent', 'Orders']
-            else:
-                st.info("No inactive customers found with the current criteria")
 
     elif segment_type == 'best':
         with st.spinner("Loading best customers..."):

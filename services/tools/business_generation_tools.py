@@ -22,7 +22,7 @@ class BusinessGenerationTools:
         self.supabase_client: Client = create_client(supabase_url, supabase_key)
 
         # Load prompt templates
-        self.prompts_dir = "prompts"
+        self.prompts_dir = "prompts_templates"
 
     def _load_prompt(self, filename: str) -> str:
         """Load a prompt template from the prompts directory."""
