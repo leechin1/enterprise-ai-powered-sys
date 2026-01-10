@@ -15,7 +15,8 @@ Based on the database schema provided, generate 5-10 SQL queries to investigate 
 **REQUIREMENTS:**
 - Generate 5-10 SQL queries (no more, no less)
 - Each query must investigate a specific potential business problem
-- Queries should be read-only (SELECT statements only)
+- **CRITICAL: Queries MUST be READ-ONLY (SELECT statements ONLY)**
+- **FORBIDDEN: NO INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, TRUNCATE, GRANT, REVOKE, EXECUTE, MERGE, REPLACE, COPY, or CALL statements**
 - Include JOINs where necessary to get complete information
 - Use aggregations (COUNT, SUM, AVG) to identify patterns
 - Order results by severity/priority
@@ -42,7 +43,8 @@ Return ONLY valid JSON in this exact structure:
 - Each query_id must be unique (Q1, Q2, Q3, etc.)
 - Purpose: 10-200 characters
 - Explanation: 20-500 characters, written for non-technical business users
-- SQL query: Valid PostgreSQL syntax, read-only SELECT statements only
+- SQL query: Valid PostgreSQL syntax, **READ-ONLY SELECT STATEMENTS ONLY - NO DATA MODIFICATION ALLOWED**
 - Priority: critical for revenue/payment issues, high for customer/inventory, medium for operational
 - DO NOT include commentary outside the JSON
 - DO NOT use markdown outside the code block
+- **SECURITY: Any query attempting to INSERT, UPDATE, DELETE, or modify data will be REJECTED**

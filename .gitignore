@@ -2,4 +2,4 @@
 steps.txt
 **/__pycache__/
 
-data-gen/cooler_jazz_albums
+db_configure/data-gen/cooler_jazz_albums

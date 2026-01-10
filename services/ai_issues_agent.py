@@ -220,9 +220,54 @@ class AIIssuesAgent:
                 "error": str(e)
             }
 
+    def _validate_read_only_query(self, sql_query: str) -> tuple[bool, str]:
+        """
+        Validate that SQL query is read-only (SELECT statements only)
+
+        Args:
+            sql_query: The SQL query to validate
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+
+        # Strip trailing semicolons (single trailing semicolon is acceptable)
+        sql_query = sql_query.strip().rstrip(';')
+
+        # Convert to uppercase and strip whitespace for checking
+        query_upper = sql_query.upper()
+
+        # Remove comments
+        query_upper = re.sub(r'--.*$', '', query_upper, flags=re.MULTILINE)
+        query_upper = re.sub(r'/\*.*?\*/', '', query_upper, flags=re.DOTALL)
+
+        # Check for semicolons in the middle (multi-statement attempts)
+        if ';' in query_upper:
+            return False, "READ-ONLY VIOLATION: Multiple statements not allowed"
+
+        # List of forbidden SQL keywords that modify data
+        forbidden_keywords = [
+            'INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER',
+            'TRUNCATE', 'GRANT', 'REVOKE', 'EXECUTE', 'EXEC',
+            'MERGE', 'REPLACE', 'COPY', 'CALL'
+        ]
+
+        # Check if query contains any forbidden keywords using word boundaries
+        # This prevents false positives like "created_at" matching "CREATE"
+        for keyword in forbidden_keywords:
+            pattern = r'\b' + keyword + r'\b'
+            if re.search(pattern, query_upper):
+                return False, f"READ-ONLY VIOLATION: Query contains forbidden keyword '{keyword}'"
+
+        # Ensure query starts with SELECT (after potential WITH clauses)
+        if not re.match(r'^\s*(SELECT|WITH)\b', query_upper):
+            return False, "READ-ONLY VIOLATION: Only SELECT queries are allowed"
+
+        return True, ""
+
     def execute_sql_queries(self, queries: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Execute SQL queries and return results
+        Execute SQL queries with READ-ONLY enforcement and return results
 
         Args:
             queries: List of SQL query objects from generate_sql_queries()
@@ -242,7 +287,23 @@ class AIIssuesAgent:
                 query_id = query_obj['query_id']
                 sql_query = query_obj['sql_query']
 
-                # Execute query using Supabase RPC
+                # ENFORCE READ-ONLY: Validate query before execution
+                is_valid, error_msg = self._validate_read_only_query(sql_query)
+                if not is_valid:
+                    results.append({
+                        "query_id": query_id,
+                        "purpose": query_obj['purpose'],
+                        "explanation": query_obj['explanation'],
+                        "sql_query": sql_query,
+                        "priority": query_obj['priority'],
+                        "success": False,
+                        "error": error_msg,
+                        "data": [],
+                        "row_count": 0
+                    })
+                    continue
+
+                # Execute query using Supabase RPC with read-only function
                 result = self.supabase.rpc('execute_readonly_sql', {'sql_query': sql_query}).execute()
 
                 results.append({

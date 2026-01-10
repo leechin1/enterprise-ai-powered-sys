@@ -363,13 +363,13 @@ def render_review_responses_tab():
                     with col3:
                         st.metric("Total Reviews", count)
                     with col4:
-                        # Generate Responses button for this category
-                        if st.button(f"🤖 Generate Responses (max 20)", key=f"batch_gen_{category_key}", type="primary", use_container_width=True):
+                        # Generate Responses button for this category (limited to 5 for preview)
+                        if st.button(f"🤖 Generate Responses (preview 5)", key=f"batch_gen_{category_key}", type="primary", use_container_width=True):
                             with st.spinner(f"Generating responses for {category_info['title']}..."):
                                 batch_results = review_agent.generate_batch_responses(
                                     reviews_df=reviews_df,
                                     category=category_key,
-                                    limit=20
+                                    limit=5  # Changed from 20 to 5 for preview
                                 )
                                 st.session_state[f'batch_results_{category_key}'] = batch_results
                                 st.session_state[f'show_popup_{category_key}'] = True
@@ -377,9 +377,9 @@ def render_review_responses_tab():
 
                     st.markdown("---")
 
-                    # Show sample reviews (first 3)
-                    st.caption(f"**Sample Reviews (showing first 3 of {count}):**")
-                    for idx, (_, review) in enumerate(category_reviews.head(3).iterrows()):
+                    # Show sample reviews (first 5)
+                    st.caption(f"**Sample Reviews (showing first 5 of {count}):**")
+                    for idx, (_, review) in enumerate(category_reviews.head(5).iterrows()):
                         st.markdown(f"**{review['customer_name']}** - {review['star_rating']} ⭐ (Sentiment: {review['sentiment_score']:.2f})")
                         st.markdown(f"_{review['review_text']}_")
                         st.markdown("---")

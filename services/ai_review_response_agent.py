@@ -8,6 +8,7 @@ import os
 import re
 import random
 import logging
+import time
 from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -28,12 +29,12 @@ MODEL=os.getenv("GEMINI_MODEL")
 class AIReviewResponseAgent:
     """AI agent for analyzing reviews and generating appropriate responses"""
 
-    # Sentiment thresholds
-    SENTIMENT_POSITIVE_THRESHOLD = 0.1
-    SENTIMENT_NEGATIVE_THRESHOLD = -0.1
-    STAR_HIGH_THRESHOLD = 4  # 4-5 stars
-    STAR_MEDIUM_THRESHOLD = 3  # 3-4 stars
-    STAR_LOW_THRESHOLD = 2  # 1-2 stars
+    # Sentiment thresholds - REINFORCED for clear classification
+    SENTIMENT_POSITIVE_THRESHOLD = 0.15  # Increased from 0.1 to reduce false positives
+    SENTIMENT_NEGATIVE_THRESHOLD = -0.15  # Decreased from -0.1 to be more strict
+    STAR_HIGH_THRESHOLD = 4  # 4-5 stars = high
+    STAR_MEDIUM_THRESHOLD = 3  # Exactly 3 stars = medium
+    STAR_LOW_THRESHOLD = 2  # 1-2 stars = low  
 
     def __init__(self):
         self.client: Optional[Client] = None
@@ -51,7 +52,7 @@ class AIReviewResponseAgent:
 
             self.client = create_client(supabase_url, supabase_key)
 
-            # Initialize Gemini with Flash-Lite model
+            # Initialize Gemini 
             gemini_api_key = os.getenv('GEMINI_API_KEY')
             if gemini_api_key:
                 self.gemini_client = genai.Client(api_key=gemini_api_key)
@@ -78,12 +79,15 @@ class AIReviewResponseAgent:
         """
         Classify review into one of 5 categories based on star rating and sentiment
 
+        REINFORCED LOGIC: 2-star reviews with low sentiment (<=0.15) should be classified
+        as low_sentiment_low_stars, NOT medium_reviews
+
         Categories:
-        - low_sentiment_low_stars: Reply comprehensively, ask to email support
-        - low_sentiment_high_stars: Encourage + apologize for experience
-        - high_sentiment_high_stars: Thank generously, encourage repeat purchase
-        - high_sentiment_low_stars: Apologize, ask to contact support
-        - medium_reviews: 3-4 stars, generic positive responses
+        - low_sentiment_low_stars: 1-2 stars + negative sentiment - Reply comprehensively, ask to email support
+        - low_sentiment_high_stars: 4-5 stars + negative sentiment - Encourage + apologize for experience
+        - high_sentiment_high_stars: 4-5 stars + positive sentiment - Thank generously, encourage repeat purchase
+        - high_sentiment_low_stars: 1-2 stars + positive sentiment - Apologize, ask to contact support
+        - medium_reviews: 3 stars OR 4 stars with neutral sentiment (between -0.15 and 0.15) - generic positive responses
 
         Args:
             star_rating: Star rating (1-5)
@@ -92,28 +96,39 @@ class AIReviewResponseAgent:
         Returns:
             Category string
         """
-        is_high_sentiment = sentiment_score >= self.SENTIMENT_POSITIVE_THRESHOLD
-        is_low_sentiment = sentiment_score <= self.SENTIMENT_NEGATIVE_THRESHOLD
-        is_high_stars = star_rating >= self.STAR_HIGH_THRESHOLD
-        is_low_stars = star_rating <= self.STAR_LOW_THRESHOLD
-        is_medium_stars = self.STAR_MEDIUM_THRESHOLD <= star_rating <= self.STAR_HIGH_THRESHOLD
+        # Determine sentiment buckets (REINFORCED with stricter thresholds)
+        is_high_sentiment = sentiment_score >= self.SENTIMENT_POSITIVE_THRESHOLD  # >= 0.15
+        is_low_sentiment = sentiment_score <= self.SENTIMENT_NEGATIVE_THRESHOLD  # <= -0.15
 
-        # Check for medium reviews first (3-4 stars)
+        # Determine star buckets (REINFORCED)
+        is_high_stars = star_rating >= self.STAR_HIGH_THRESHOLD  # 4-5 stars
+        is_low_stars = star_rating <= self.STAR_LOW_THRESHOLD  # 1-2 stars
+        is_medium_stars = star_rating == self.STAR_MEDIUM_THRESHOLD  # Exactly 3 stars
+
+        # CRITICAL: Classify low stars (1-2) based on sentiment FIRST
+        if is_low_stars:
+            if is_low_sentiment:
+                return "low_sentiment_low_stars"  # 1-2 stars + negative sentiment
+            elif is_high_sentiment:
+                return "high_sentiment_low_stars"  # 1-2 stars + positive sentiment (unusual)
+            else:
+                return "low_sentiment_low_stars"  # 1-2 stars + neutral sentiment = treat as problematic
+
+        # Classify high stars (4-5) based on sentiment
+        if is_high_stars:
+            if is_high_sentiment:
+                return "high_sentiment_high_stars"  # 4-5 stars + positive sentiment
+            elif is_low_sentiment:
+                return "low_sentiment_high_stars"  # 4-5 stars + negative sentiment (unusual)
+            else:
+                return "medium_reviews"  # 4 stars + neutral sentiment
+
+        # 3-star reviews always go to medium
         if is_medium_stars:
             return "medium_reviews"
 
-        # Classify based on sentiment and stars
-        if is_low_sentiment and is_low_stars:
-            return "low_sentiment_low_stars"
-        elif is_low_sentiment and is_high_stars:
-            return "low_sentiment_high_stars"
-        elif is_high_sentiment and is_high_stars:
-            return "high_sentiment_high_stars"
-        elif is_high_sentiment and is_low_stars:
-            return "high_sentiment_low_stars"
-        else:
-            # Default to medium for edge cases
-            return "medium_reviews"
+        # Default fallback for edge cases (shouldn't reach here)
+        return "medium_reviews"
 
     def _extract_and_validate_response(
         self,
@@ -474,6 +489,11 @@ CRITICAL FORMATTING RULES:
                         'status': 'success'
                     }
                 else:
+                    # RATE LIMITING: Add 1.5 second delay between AI-generated responses
+                    # to avoid overwhelming the API and ensure quality responses
+                    if len(results) > 0:  # Don't delay before first request
+                        time.sleep(1.5)
+
                     # Generate custom AI response
                     response = self.generate_review_response(
                         review_text=review['review_text'],
