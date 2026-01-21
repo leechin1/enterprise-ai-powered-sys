@@ -61,11 +61,14 @@ def render_analytics():
     st.markdown("---")
 
     # Tabs for different analytics views
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "📈 Sales Trends",
         "👥 Customer Insights",
         "📦 Inventory Analysis",
         "🎵 Genre Performance",
+        "🎤 Artist Performance",
+        "⭐ Review Analytics",
+        "💳 Payment Analytics",
         "🗄️ Table Viewer",
     ])
 
@@ -82,6 +85,15 @@ def render_analytics():
         render_genre_performance(analytics)
 
     with tab5:
+        render_artist_performance(analytics)
+
+    with tab6:
+        render_review_analytics(analytics)
+
+    with tab7:
+        render_payment_analytics(analytics)
+
+    with tab8:
         render_table_viewer(analytics)
 
 
@@ -152,6 +164,73 @@ def render_sales_trends(analytics: AnalyticsConnector):
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No payment data available yet")
+
+    # Monthly trends and day-of-week analysis
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Monthly Revenue Trends")
+
+        monthly_data = analytics.get_orders_by_month()
+
+        if not monthly_data.empty:
+            fig = go.Figure()
+
+            fig.add_trace(go.Bar(
+                x=monthly_data['month'],
+                y=monthly_data['revenue'],
+                marker_color='#6366F1',
+                text=[f"${r:,.0f}" for r in monthly_data['revenue']],
+                textposition='outside',
+                hovertemplate='<b>%{x}</b><br>Revenue: $%{y:,.2f}<br><extra></extra>'
+            ))
+
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#F1F5F9',
+                height=300,
+                margin=dict(l=0, r=0, t=20, b=0),
+                xaxis=dict(showgrid=False, title='Month'),
+                yaxis=dict(showgrid=True, gridcolor='#334155', title='Revenue ($)')
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No monthly data available")
+
+    with col2:
+        st.subheader("Sales by Day of Week")
+
+        dow_data = analytics.get_orders_by_day_of_week()
+
+        if not dow_data.empty:
+            fig = go.Figure(data=[go.Bar(
+                x=dow_data['day'],
+                y=dow_data['order_count'],
+                marker_color='#10B981',
+                text=dow_data['order_count'],
+                textposition='outside',
+                hovertemplate='<b>%{x}</b><br>Orders: %{y}<br><extra></extra>'
+            )])
+
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#F1F5F9',
+                height=300,
+                margin=dict(l=0, r=0, t=20, b=0),
+                xaxis=dict(showgrid=False, title='Day'),
+                yaxis=dict(showgrid=True, gridcolor='#334155', title='Orders')
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No day-of-week data available")
+
+    st.markdown("---")
 
     # Top Selling Albums
     st.subheader("🏆 Top Selling Albums")
@@ -255,6 +334,69 @@ def render_customer_insights(analytics: AnalyticsConnector):
         review_count = analytics.get_review_count()
         st.metric("Total Reviews", f"{review_count:,}")
 
+    st.markdown("---")
+
+    # Customer order frequency and growth
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Customer Order Frequency")
+
+        order_freq = analytics.get_customer_order_frequency()
+
+        if not order_freq.empty:
+            fig = go.Figure(data=[go.Pie(
+                labels=order_freq['frequency'],
+                values=order_freq['customers'],
+                hole=0.4,
+                marker=dict(colors=['#6366F1', '#8B5CF6', '#3B82F6', '#10B981']),
+                textinfo='label+value',
+                hovertemplate='<b>%{label}</b><br>Customers: %{value}<br>%{percent}<extra></extra>'
+            )])
+
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#F1F5F9',
+                height=300,
+                margin=dict(l=0, r=0, t=20, b=0)
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No order frequency data available")
+
+    with col2:
+        st.subheader("Customer Growth by Month")
+
+        customer_growth = analytics.get_customers_by_registration_month()
+
+        if not customer_growth.empty:
+            fig = go.Figure()
+
+            fig.add_trace(go.Bar(
+                x=customer_growth['month'],
+                y=customer_growth['new_customers'],
+                marker_color='#8B5CF6',
+                text=customer_growth['new_customers'],
+                textposition='outside',
+                hovertemplate='<b>%{x}</b><br>New Customers: %{y}<extra></extra>'
+            ))
+
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#F1F5F9',
+                height=300,
+                margin=dict(l=0, r=0, t=20, b=0),
+                xaxis=dict(showgrid=False, title='Month'),
+                yaxis=dict(showgrid=True, gridcolor='#334155', title='New Customers')
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No customer growth data available")
+
 
 def render_inventory_analysis(analytics: AnalyticsConnector):
     """Inventory performance and turnover analysis - REAL DATA"""
@@ -343,6 +485,37 @@ def render_inventory_analysis(analytics: AnalyticsConnector):
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No label data available")
+
+    # Price distribution
+    st.subheader("💰 Album Price Distribution")
+
+    price_dist = analytics.get_price_distribution()
+
+    if not price_dist.empty:
+        fig = go.Figure(data=[go.Bar(
+            x=price_dist['price_range'],
+            y=price_dist['count'],
+            marker_color=['#10B981', '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444'],
+            text=price_dist['count'],
+            textposition='outside',
+            hovertemplate='<b>%{x}</b><br>Albums: %{y}<extra></extra>'
+        )])
+
+        fig.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font_color='#F1F5F9',
+            height=300,
+            margin=dict(l=0, r=0, t=20, b=0),
+            xaxis=dict(showgrid=False, title='Price Range'),
+            yaxis=dict(showgrid=True, gridcolor='#334155', title='Number of Albums')
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No price data available")
+
+    st.markdown("---")
 
     # Low stock items - REAL DATA
     st.subheader("⚠️ Low Stock Alerts (≤20 units)")
@@ -638,6 +811,406 @@ def render_genre_performance(analytics: AnalyticsConnector):
 
     else:
         st.info("No genre sales data available yet")
+
+
+def render_artist_performance(analytics: AnalyticsConnector):
+    """Artist-specific performance analytics"""
+
+    st.subheader("🎤 Artist Performance Analysis")
+
+    artist_data = analytics.get_artist_performance(limit=15)
+
+    if not artist_data.empty:
+        # Summary metrics
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("Total Artists Sold", len(artist_data))
+
+        with col2:
+            top_artist = artist_data.iloc[0]
+            st.metric("Top Artist", top_artist['artist'][:20], f"${top_artist['revenue']:,.0f}")
+
+        with col3:
+            total_units = artist_data['units_sold'].sum()
+            st.metric("Total Units by Top 15", f"{total_units:,}")
+
+        st.markdown("---")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("Revenue by Artist")
+
+            fig = go.Figure(data=[go.Bar(
+                x=artist_data['revenue'],
+                y=artist_data['artist'],
+                orientation='h',
+                marker_color='#8B5CF6',
+                text=[f"${r:,.0f}" for r in artist_data['revenue']],
+                textposition='outside',
+                hovertemplate='<b>%{y}</b><br>Revenue: $%{x:,.2f}<extra></extra>'
+            )])
+
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#F1F5F9',
+                height=500,
+                margin=dict(l=0, r=0, t=20, b=0),
+                xaxis=dict(showgrid=True, gridcolor='#334155', title='Revenue ($)'),
+                yaxis=dict(showgrid=False, autorange="reversed")
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col2:
+            st.subheader("Units Sold by Artist")
+
+            fig = go.Figure(data=[go.Bar(
+                x=artist_data['units_sold'],
+                y=artist_data['artist'],
+                orientation='h',
+                marker_color='#10B981',
+                text=[f"{u} units" for u in artist_data['units_sold']],
+                textposition='outside',
+                hovertemplate='<b>%{y}</b><br>Units: %{x}<extra></extra>'
+            )])
+
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#F1F5F9',
+                height=500,
+                margin=dict(l=0, r=0, t=20, b=0),
+                xaxis=dict(showgrid=True, gridcolor='#334155', title='Units Sold'),
+                yaxis=dict(showgrid=False, autorange="reversed")
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+        # Artist performance table
+        st.subheader("Detailed Artist Metrics")
+
+        display_df = artist_data.copy()
+        display_df['avg_price'] = display_df['revenue'] / display_df['units_sold']
+        display_df['revenue'] = display_df['revenue'].apply(lambda x: f"${x:,.2f}")
+        display_df['avg_price'] = display_df['avg_price'].apply(lambda x: f"${x:,.2f}")
+
+        display_df = display_df.rename(columns={
+            'artist': 'Artist',
+            'units_sold': 'Units Sold',
+            'revenue': 'Total Revenue',
+            'order_count': 'Orders',
+            'avg_price': 'Avg Sale Price'
+        })
+
+        st.dataframe(
+            display_df[['Artist', 'Total Revenue', 'Units Sold', 'Orders', 'Avg Sale Price']],
+            use_container_width=True,
+            hide_index=True
+        )
+
+    else:
+        st.info("No artist sales data available yet")
+
+
+def render_review_analytics(analytics: AnalyticsConnector):
+    """Review and rating analytics"""
+
+    st.subheader("⭐ Review & Rating Analytics")
+
+    # Summary metrics
+    col1, col2, col3, col4 = st.columns(4)
+
+    avg_rating = analytics.get_average_rating()
+    review_count = analytics.get_review_count()
+    rating_dist = analytics.get_rating_distribution()
+
+    with col1:
+        st.metric("Average Rating", f"{avg_rating:.2f} ⭐")
+
+    with col2:
+        st.metric("Total Reviews", f"{review_count:,}")
+
+    with col3:
+        if not rating_dist.empty:
+            five_star = rating_dist[rating_dist['rating'] == 5]['count'].values
+            five_star_count = five_star[0] if len(five_star) > 0 else 0
+            st.metric("5-Star Reviews", f"{five_star_count:,}")
+
+    with col4:
+        if not rating_dist.empty:
+            one_star = rating_dist[rating_dist['rating'] == 1]['count'].values
+            one_star_count = one_star[0] if len(one_star) > 0 else 0
+            st.metric("1-Star Reviews", f"{one_star_count:,}")
+
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Rating Distribution")
+
+        if not rating_dist.empty:
+            colors = ['#EF4444', '#F97316', '#F59E0B', '#84CC16', '#10B981']
+
+            fig = go.Figure(data=[go.Bar(
+                x=[f"{r} ⭐" for r in rating_dist['rating']],
+                y=rating_dist['count'],
+                marker_color=colors,
+                text=rating_dist['count'],
+                textposition='outside',
+                hovertemplate='<b>%{x}</b><br>Count: %{y}<extra></extra>'
+            )])
+
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#F1F5F9',
+                height=350,
+                margin=dict(l=0, r=0, t=20, b=0),
+                xaxis=dict(showgrid=False, title='Rating'),
+                yaxis=dict(showgrid=True, gridcolor='#334155', title='Count')
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No rating data available")
+
+    with col2:
+        st.subheader("Rating Breakdown")
+
+        if not rating_dist.empty:
+            fig = go.Figure(data=[go.Pie(
+                labels=[f"{r} Stars" for r in rating_dist['rating']],
+                values=rating_dist['count'],
+                hole=0.4,
+                marker=dict(colors=['#EF4444', '#F97316', '#F59E0B', '#84CC16', '#10B981']),
+                hovertemplate='<b>%{label}</b><br>Count: %{value}<br>%{percent}<extra></extra>'
+            )])
+
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#F1F5F9',
+                height=350,
+                margin=dict(l=0, r=0, t=20, b=0)
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No rating data available")
+
+    # Top Rated Albums
+    st.subheader("🏆 Top Rated Albums")
+
+    top_rated = analytics.get_top_rated_albums(limit=10)
+
+    if not top_rated.empty:
+        fig = go.Figure(data=[go.Bar(
+            x=top_rated['avg_rating'],
+            y=[f"{row['title'][:25]}..." if len(row['title']) > 25 else row['title']
+               for _, row in top_rated.iterrows()],
+            orientation='h',
+            marker_color='#F59E0B',
+            text=[f"{r:.1f} ⭐ ({c} reviews)" for r, c in zip(top_rated['avg_rating'], top_rated['review_count'])],
+            textposition='outside',
+            hovertemplate='<b>%{y}</b><br>Rating: %{x:.2f}<extra></extra>'
+        )])
+
+        fig.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font_color='#F1F5F9',
+            height=400,
+            margin=dict(l=0, r=0, t=20, b=0),
+            xaxis=dict(showgrid=True, gridcolor='#334155', title='Average Rating', range=[0, 5.5]),
+            yaxis=dict(showgrid=False, autorange="reversed")
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No rated albums available (minimum 2 reviews required)")
+
+    # Recent Reviews
+    st.subheader("📝 Recent Reviews")
+
+    recent_reviews = analytics.get_recent_reviews(limit=10)
+
+    if not recent_reviews.empty:
+        display_df = recent_reviews.copy()
+        display_df['rating'] = display_df['rating'].apply(lambda x: '⭐' * x)
+        display_df = display_df.rename(columns={
+            'album': 'Album',
+            'artist': 'Artist',
+            'customer': 'Customer',
+            'rating': 'Rating',
+            'review': 'Review',
+            'date': 'Date'
+        })
+
+        st.dataframe(
+            display_df[['Album', 'Artist', 'Customer', 'Rating', 'Review']],
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info("No reviews available")
+
+
+def render_payment_analytics(analytics: AnalyticsConnector):
+    """Payment analytics and trends"""
+
+    st.subheader("💳 Payment Analytics")
+
+    # Payment method distribution (already exists in sales trends, but let's expand)
+    payment_data = analytics.get_payment_method_distribution()
+    payment_status = analytics.get_payment_status_distribution()
+
+    # Summary metrics
+    col1, col2, col3, col4 = st.columns(4)
+
+    total_payments = payment_data['count'].sum() if not payment_data.empty else 0
+    total_amount = payment_data['total_amount'].sum() if not payment_data.empty else 0
+
+    with col1:
+        st.metric("Total Payments", f"{total_payments:,}")
+
+    with col2:
+        st.metric("Total Amount", f"${total_amount:,.2f}")
+
+    with col3:
+        if not payment_status.empty:
+            completed = payment_status[payment_status['status'] == 'completed']
+            completed_count = completed['count'].values[0] if len(completed) > 0 else 0
+            success_rate = (completed_count / total_payments * 100) if total_payments > 0 else 0
+            st.metric("Success Rate", f"{success_rate:.1f}%")
+
+    with col4:
+        avg_payment = total_amount / total_payments if total_payments > 0 else 0
+        st.metric("Avg Payment", f"${avg_payment:,.2f}")
+
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Payment Methods")
+
+        if not payment_data.empty:
+            fig = go.Figure(data=[go.Bar(
+                x=payment_data['payment_method'],
+                y=payment_data['total_amount'],
+                marker_color=['#6366F1', '#8B5CF6', '#3B82F6', '#10B981'][:len(payment_data)],
+                text=[f"${a:,.0f}<br>({c} txns)" for a, c in zip(payment_data['total_amount'], payment_data['count'])],
+                textposition='outside',
+                hovertemplate='<b>%{x}</b><br>Amount: $%{y:,.2f}<extra></extra>'
+            )])
+
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#F1F5F9',
+                height=350,
+                margin=dict(l=0, r=0, t=20, b=0),
+                xaxis=dict(showgrid=False, title='Payment Method'),
+                yaxis=dict(showgrid=True, gridcolor='#334155', title='Total Amount ($)')
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No payment data available")
+
+    with col2:
+        st.subheader("Payment Status")
+
+        if not payment_status.empty:
+            status_colors = {
+                'completed': '#10B981',
+                'pending': '#F59E0B',
+                'failed': '#EF4444',
+                'refunded': '#8B5CF6'
+            }
+
+            colors = [status_colors.get(s, '#6366F1') for s in payment_status['status']]
+
+            fig = go.Figure(data=[go.Pie(
+                labels=payment_status['status'].str.title(),
+                values=payment_status['count'],
+                hole=0.4,
+                marker=dict(colors=colors),
+                textinfo='label+value',
+                hovertemplate='<b>%{label}</b><br>Count: %{value}<br>%{percent}<extra></extra>'
+            )])
+
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#F1F5F9',
+                height=350,
+                margin=dict(l=0, r=0, t=20, b=0)
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No payment status data available")
+
+    # Payment trends over time
+    st.subheader("Payment Trends Over Time")
+
+    payment_trends = analytics.get_payments_over_time()
+
+    if not payment_trends.empty:
+        fig = go.Figure()
+
+        fig.add_trace(go.Scatter(
+            x=payment_trends['date'],
+            y=payment_trends['amount'],
+            mode='lines+markers',
+            name='Payment Amount',
+            line=dict(color='#10B981', width=3),
+            marker=dict(size=8),
+            fill='tozeroy',
+            fillcolor='rgba(16, 185, 129, 0.1)',
+            hovertemplate='<b>%{x}</b><br>Amount: $%{y:,.2f}<extra></extra>'
+        ))
+
+        fig.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font_color='#F1F5F9',
+            height=300,
+            margin=dict(l=0, r=0, t=20, b=0),
+            xaxis=dict(showgrid=False, title='Date'),
+            yaxis=dict(showgrid=True, gridcolor='#334155', title='Amount ($)')
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No payment trend data available")
+
+    # Detailed payment table
+    st.subheader("Payment Method Details")
+
+    if not payment_data.empty:
+        display_df = payment_data.copy()
+        display_df['avg_payment'] = display_df['total_amount'] / display_df['count']
+        display_df['total_amount'] = display_df['total_amount'].apply(lambda x: f"${x:,.2f}")
+        display_df['avg_payment'] = display_df['avg_payment'].apply(lambda x: f"${x:,.2f}")
+
+        display_df = display_df.rename(columns={
+            'payment_method': 'Method',
+            'count': 'Transactions',
+            'total_amount': 'Total Amount',
+            'avg_payment': 'Avg Transaction'
+        })
+
+        st.dataframe(
+            display_df[['Method', 'Transactions', 'Total Amount', 'Avg Transaction']],
+            use_container_width=True,
+            hide_index=True
+        )
 
 
 def render_table_viewer(analytics: AnalyticsConnector):
