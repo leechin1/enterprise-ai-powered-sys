@@ -100,19 +100,94 @@ def render_issues_tab(issues_agent):
     st.markdown("### ⚠️ Business Issues & Problems")
     st.caption("Three-stage AI analysis: SQL Generation → Query Approval → Issue Identification → Fix Proposals")
 
-    # Stage 0: Generate SQL Queries button
-    if st.button("🔍 Stage 0: Generate SQL Queries", use_container_width=True, type="primary", key="sql_generate"):
-        with st.spinner("🧠 Stage 0: AI Agent analyzing database schema and generating SQL queries..."):
-            sql_result = issues_agent.generate_sql_queries()
-            st.session_state.sql_queries_cache = sql_result
-            st.session_state.issues_cache = None  # Clear previous results
-            st.session_state.fixes_cache = None
-            st.rerun()
+    # Initialize analytics connector for saved queries
+    try:
+        from utils.db_analytics import AnalyticsConnector
+        analytics = AnalyticsConnector()
+        saved_queries_available = True
+    except Exception:
+        saved_queries_available = False
+        analytics = None
+
+    # Check for saved queries
+    saved_info = None
+    if saved_queries_available and analytics:
+        saved_info = analytics.get_saved_queries_info('last_generated')
+
+    # Stage 0 Options: Generate new OR Load saved
+    st.markdown("#### Stage 0: SQL Query Generation")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("🔍 Generate New Queries", use_container_width=True, type="primary", key="sql_generate"):
+            with st.spinner("🧠 Stage 0: AI Agent analyzing database schema and generating SQL queries..."):
+                sql_result = issues_agent.generate_sql_queries()
+                st.session_state.sql_queries_cache = sql_result
+                st.session_state.issues_cache = None  # Clear previous results
+                st.session_state.fixes_cache = None
+                st.session_state.loaded_from_saved = False
+                st.rerun()
+
+    with col2:
+        if saved_info:
+            # Format the saved date nicely
+            saved_at = saved_info.get('updated_at', saved_info.get('created_at', 'Unknown'))
+            if saved_at and saved_at != 'Unknown':
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(saved_at.replace('Z', '+00:00'))
+                    saved_at_formatted = dt.strftime('%b %d, %Y %I:%M %p')
+                except:
+                    saved_at_formatted = saved_at
+            else:
+                saved_at_formatted = 'Unknown'
+
+            if st.button(
+                f"📂 Load Last Saved ({saved_info['query_count']} queries)",
+                use_container_width=True,
+                type="secondary",
+                key="sql_load_saved",
+                help=f"Saved on {saved_at_formatted} using {saved_info.get('model', 'unknown')}"
+            ):
+                # Load saved queries
+                saved_data = analytics.load_saved_queries('last_generated')
+                if saved_data and saved_data.get('queries'):
+                    # Convert to the format expected by display_sql_queries
+                    st.session_state.sql_queries_cache = {
+                        "success": True,
+                        "type": "sql_queries",
+                        "stage": 0,
+                        "data": {"queries": saved_data['queries']},
+                        "model": saved_data.get('model', 'unknown'),
+                        "loaded_from_saved": True,
+                        "saved_at": saved_at_formatted
+                    }
+                    st.session_state.issues_cache = None
+                    st.session_state.fixes_cache = None
+                    st.session_state.loaded_from_saved = True
+                    st.rerun()
+                else:
+                    st.error("Failed to load saved queries")
+        else:
+            st.button(
+                "📂 No Saved Queries",
+                use_container_width=True,
+                type="secondary",
+                key="sql_no_saved",
+                disabled=True,
+                help="Generate queries first, then save them for later use"
+            )
 
     # Display Stage 0: SQL Queries for approval
     if st.session_state.get('sql_queries_cache'):
         sql_result = st.session_state.sql_queries_cache
-        display_sql_queries(sql_result, issues_agent)
+
+        # Show if loaded from saved
+        if sql_result.get('loaded_from_saved') or st.session_state.get('loaded_from_saved'):
+            st.info(f"📂 Loaded from saved queries (saved: {sql_result.get('saved_at', 'Unknown')})")
+
+        display_sql_queries(sql_result, issues_agent, analytics)
 
         st.markdown("---")
 
@@ -215,7 +290,7 @@ def render_issues_analysis(ai_agent):
                 st.rerun()
 
 
-def display_sql_queries(sql_result, issues_agent):
+def display_sql_queries(sql_result, issues_agent, analytics=None):
     """Display generated SQL queries for user approval"""
     if not sql_result["success"]:
         st.error(f"❌ SQL Generation failed: {sql_result.get('error', 'Unknown error')}")
@@ -253,8 +328,33 @@ def display_sql_queries(sql_result, issues_agent):
 
     st.markdown("---")
 
-    # Accept all queries button
-    if st.button("✅ Accept All Queries & Execute", use_container_width=True, type="primary", key="execute_queries"):
+    # Action buttons row
+    col1, col2 = st.columns([3, 1])
+
+    with col2:
+        # Save queries button (only if analytics is available and queries weren't loaded from saved)
+        if analytics and not sql_result.get('loaded_from_saved'):
+            if st.button("💾 Save Queries", use_container_width=True, key="save_queries"):
+                with st.spinner("Saving queries..."):
+                    success = analytics.save_generated_queries(
+                        queries=queries,
+                        model=sql_result.get('model', 'unknown')
+                    )
+                    if success:
+                        st.success("✅ Queries saved!")
+                        st.session_state.queries_saved = True
+                    else:
+                        st.error("Failed to save queries")
+
+            # Show saved indicator
+            if st.session_state.get('queries_saved'):
+                st.caption("✅ Saved to database")
+
+    with col1:
+        # Accept all queries button
+        execute_clicked = st.button("✅ Accept All Queries & Execute (Stage 1)", use_container_width=True, type="primary", key="execute_queries")
+
+    if execute_clicked:
         with st.spinner("⚙️ Executing SQL queries and analyzing results..."):
             # Execute queries
             execution_result = issues_agent.execute_sql_queries(queries)

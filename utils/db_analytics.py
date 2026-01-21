@@ -717,3 +717,153 @@ class AnalyticsConnector:
             {'price_range': k, 'count': v}
             for k, v in buckets.items()
         ])
+
+    # ============ SAVED QUERIES ANALYTICS ============
+
+    def save_generated_queries(self, queries: List[Dict], model: str, name: str = 'last_generated') -> bool:
+        """
+        Save generated SQL queries to Supabase for later reuse
+
+        Args:
+            queries: List of query objects from generate_sql_queries()
+            model: Model used to generate queries
+            name: Identifier for this query set (default: 'last_generated')
+
+        Returns:
+            True if saved successfully, False otherwise
+        """
+        try:
+            import json
+            from datetime import datetime
+
+            # Check if entry exists
+            existing = self.client.table('saved_queries').select('id').eq('name', name).execute()
+
+            if existing.data:
+                # Update existing
+                result = self.client.table('saved_queries').update({
+                    'queries': queries,
+                    'model': model,
+                    'updated_at': datetime.now().isoformat()
+                }).eq('name', name).execute()
+            else:
+                # Insert new
+                result = self.client.table('saved_queries').insert({
+                    'name': name,
+                    'description': f'Queries generated on {datetime.now().strftime("%Y-%m-%d %H:%M")}',
+                    'queries': queries,
+                    'model': model
+                }).execute()
+
+            return True
+
+        except Exception as e:
+            print(f"Error saving queries: {e}")
+            return False
+
+    def load_saved_queries(self, name: str = 'last_generated') -> Optional[Dict]:
+        """
+        Load previously saved SQL queries from Supabase
+
+        Args:
+            name: Identifier for the query set to load
+
+        Returns:
+            Dictionary with queries data or None if not found
+        """
+        try:
+            result = self.client.table('saved_queries').select('*').eq('name', name).execute()
+
+            if result.data and len(result.data) > 0:
+                row = result.data[0]
+                queries = row.get('queries', [])
+
+                # Check if queries is empty
+                if not queries or queries == []:
+                    return None
+
+                return {
+                    'id': row.get('id'),
+                    'name': row.get('name'),
+                    'description': row.get('description'),
+                    'queries': queries,
+                    'model': row.get('model'),
+                    'created_at': row.get('created_at'),
+                    'updated_at': row.get('updated_at')
+                }
+
+            return None
+
+        except Exception as e:
+            print(f"Error loading queries: {e}")
+            return None
+
+    def get_saved_queries_info(self, name: str = 'last_generated') -> Optional[Dict]:
+        """
+        Get metadata about saved queries without loading full content
+
+        Args:
+            name: Identifier for the query set
+
+        Returns:
+            Dictionary with metadata or None if not found
+        """
+        try:
+            result = self.client.table('saved_queries').select(
+                'name, model, created_at, updated_at, queries'
+            ).eq('name', name).execute()
+
+            if result.data and len(result.data) > 0:
+                row = result.data[0]
+                queries = row.get('queries', [])
+
+                # Check if queries is empty
+                if not queries or queries == []:
+                    return None
+
+                return {
+                    'name': row.get('name'),
+                    'model': row.get('model'),
+                    'query_count': len(queries),
+                    'created_at': row.get('created_at'),
+                    'updated_at': row.get('updated_at')
+                }
+
+            return None
+
+        except Exception as e:
+            print(f"Error getting queries info: {e}")
+            return None
+
+    def list_saved_queries(self) -> pd.DataFrame:
+        """
+        List all saved query sets
+
+        Returns:
+            DataFrame with saved query metadata
+        """
+        try:
+            result = self.client.table('saved_queries').select(
+                'name, description, model, created_at, updated_at, queries'
+            ).order('updated_at', desc=True).execute()
+
+            if not result.data:
+                return pd.DataFrame()
+
+            data = []
+            for row in result.data:
+                queries = row.get('queries', [])
+                if queries and queries != []:  # Only include non-empty
+                    data.append({
+                        'name': row.get('name'),
+                        'description': row.get('description'),
+                        'model': row.get('model'),
+                        'query_count': len(queries),
+                        'updated_at': row.get('updated_at')
+                    })
+
+            return pd.DataFrame(data)
+
+        except Exception as e:
+            print(f"Error listing queries: {e}")
+            return pd.DataFrame()

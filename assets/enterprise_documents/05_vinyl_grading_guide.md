@@ -1,4 +1,4 @@
-# Misty Jazz Records - Vinyl Grading Guide
+1# Misty Jazz Records - Vinyl Grading Guide
 
 ## Introduction
 
