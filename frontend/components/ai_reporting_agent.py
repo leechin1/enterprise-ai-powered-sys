@@ -194,22 +194,8 @@ def render_issues_tab(issues_agent):
     # Display Stage 1: Issues if available
     if st.session_state.get('issues_cache'):
         issues_result = st.session_state.issues_cache
-        display_issues_results(issues_result)
-
-        st.markdown("---")
-
-        # Stage 2: Generate Fixes button
-        if st.button("🔧 Stage 2: Propose Fixes", use_container_width=True, type="secondary", key="fixes_generate"):
-            with st.spinner("🛠️ Stage 2: AI Agent proposing fixes using available business tools..."):
-                issues = issues_result.get('data', {}).get('issues', [])
-                fixes_result = issues_agent.propose_fixes(issues)
-                st.session_state.fixes_cache = fixes_result
-                st.rerun()
-
-        # Display Stage 2 results if available
-        if st.session_state.get('fixes_cache'):
-            fixes_result = st.session_state.fixes_cache
-            display_fixes_results(fixes_result)
+        # Pass issues_agent to enable per-issue fix generation
+        display_issues_results(issues_result, issues_agent=issues_agent)
 
     elif not st.session_state.get('sql_queries_cache'):
         st.info("👆 Click 'Stage 0: Generate SQL Queries' to start the three-stage analysis")
@@ -464,8 +450,8 @@ def display_recommendations(recommendations_result):
             st.markdown(rec.get('description', 'N/A'))
 
 
-def display_issues_results(result):
-    """Display issues analysis results in boxes"""
+def display_issues_results(result, issues_agent=None):
+    """Display issues analysis results in boxes with per-issue fix buttons"""
     if not result["success"]:
         st.error(f"❌ Analysis failed: {result.get('error', 'Unknown error')}")
         return
@@ -483,7 +469,7 @@ def display_issues_results(result):
         st.info("🎉 No critical issues found! Business is running smoothly.")
         return
 
-    # Display issues in grid
+    # Display issues in grid with individual fix buttons
     for i, issue in enumerate(issues[:7], 1):  # Limit to 7
         severity = issue.get("severity", "medium")
         category = issue.get("category", "operations")
@@ -508,12 +494,435 @@ def display_issues_results(result):
         icon = category_icons.get(category, "⚠️")
 
         with st.container(border=True):
-            st.markdown(f"### {icon} Issue #{i}: {issue.get('title', 'Unknown Issue')}")
+            col_header, col_button = st.columns([4, 1])
+
+            with col_header:
+                st.markdown(f"### {icon} Issue #{i}: {issue.get('title', 'Unknown Issue')}")
+
+            with col_button:
+                # Individual fix button for each issue
+                if st.button("🔧 Fix Issue", key=f"fix_issue_{i}", use_container_width=True):
+                    st.session_state[f'generating_fix_{i}'] = True
+                    st.session_state[f'show_fix_modal_{i}'] = False
+                    st.rerun()
+
             st.markdown(f"**Severity:** {emoji} {severity.title()} | **Category:** {category.title()}")
             if issue.get('affected_metrics'):
                 st.markdown(f"**Affected Metrics:** {', '.join(issue['affected_metrics'])}")
             st.markdown("---")
             st.markdown(issue.get('description', 'N/A'))
+
+            # Generate fix if button was clicked
+            if st.session_state.get(f'generating_fix_{i}') and issues_agent:
+                with st.spinner(f"🧠 AI generating fix for Issue #{i}..."):
+                    # Generate fix for this specific issue
+                    fix_result = issues_agent.propose_fixes([issue])
+                    st.session_state[f'fix_result_{i}'] = fix_result
+                    st.session_state[f'generating_fix_{i}'] = False
+                    st.session_state[f'show_fix_modal_{i}'] = True
+                    st.rerun()
+
+            # Show fix modal if available
+            if st.session_state.get(f'show_fix_modal_{i}') and st.session_state.get(f'fix_result_{i}'):
+                display_fix_modal(i, issue, st.session_state[f'fix_result_{i}'])
+
+
+def display_fix_modal(issue_num: int, issue: dict, fix_result: dict):
+    """Display a modal/dialog with the proposed fix and email template preview"""
+
+    if not fix_result.get('success'):
+        st.error(f"❌ Fix generation failed: {fix_result.get('error', 'Unknown error')}")
+        return
+
+    fixes = fix_result.get('data', {}).get('fixes', [])
+    if not fixes:
+        st.warning("No fix could be generated for this issue.")
+        return
+
+    fix = fixes[0]  # Get the first fix (for single issue)
+
+    # Modal-like container
+    st.markdown("---")
+    with st.container(border=True):
+        st.markdown(f"### 🔧 Proposed Fix for Issue #{issue_num}")
+        st.caption(f"Model: {fix_result.get('model', 'unknown')}")
+
+        # Fix details
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown(f"**Fix Title:** {fix.get('fix_title', 'N/A')}")
+            st.markdown(f"**Priority:** {fix.get('priority', 'N/A').title()}")
+
+        with col2:
+            tools = fix.get('tools_to_use', [])
+            if tools:
+                st.markdown(f"**Tools:** {', '.join([f'`{t}`' for t in tools])}")
+            st.markdown(f"**Expected Outcome:** {fix.get('expected_outcome', 'N/A')}")
+
+        st.markdown("---")
+        st.markdown("**Description:**")
+        st.markdown(fix.get('fix_description', 'N/A'))
+
+        # Action steps
+        action_steps = fix.get('action_steps', [])
+        if action_steps:
+            st.markdown("**Action Steps:**")
+            for step_idx, step in enumerate(action_steps, 1):
+                st.markdown(f"{step_idx}. {step}")
+
+        st.markdown("---")
+
+        # Generate email template based on issue category
+        st.markdown("### 📧 Proposed Action Template")
+
+        category = issue.get('category', 'operations')
+        template_content = generate_fix_template(issue, fix, category)
+
+        # Display template in a text area (read-only style)
+        st.code(template_content, language=None)
+
+        # Action buttons
+        st.markdown("")
+        col_cancel, col_spacer, col_accept = st.columns([1, 2, 1])
+
+        with col_cancel:
+            if st.button("❌ Cancel", key=f"cancel_fix_modal_{issue_num}", use_container_width=True):
+                st.session_state[f'show_fix_modal_{issue_num}'] = False
+                st.session_state[f'fix_result_{issue_num}'] = None
+                st.rerun()
+
+        with col_accept:
+            if st.button("✅ Accept & Execute", key=f"accept_fix_{issue_num}", use_container_width=True, type="primary"):
+                # Show success animation
+                st.session_state[f'show_fix_modal_{issue_num}'] = False
+                st.session_state[f'fix_executed_{issue_num}'] = True
+                st.rerun()
+
+    # Show success message if fix was executed
+    if st.session_state.get(f'fix_executed_{issue_num}'):
+        st.success(f"✅ Fix for Issue #{issue_num} has been executed successfully!")
+        st.balloons()
+        # Clear the flag after showing
+        if st.button("👍 Acknowledge", key=f"ack_fix_{issue_num}"):
+            st.session_state[f'fix_executed_{issue_num}'] = False
+            st.rerun()
+
+
+def load_template_file(template_name: str) -> str:
+    """Load a template file from services/tools_templates/"""
+    try:
+        template_path = Path(__file__).parent.parent.parent / "services" / "tools_templates" / template_name
+        with open(template_path, 'r') as f:
+            return f.read()
+    except Exception as e:
+        return None
+
+
+def generate_fix_template(issue: dict, fix: dict, category: str) -> str:
+    """
+    Generate an appropriate template based on issue category and fix type using stored templates.
+
+    IMPORTANT: Customer-facing emails should NEVER expose internal business issues.
+    They should be professional, promotional, and customer-friendly.
+    Internal emails (to staff) can include issue details.
+    """
+
+    title = issue.get('title', 'Business Issue')
+    description = issue.get('description', '')
+    fix_title = fix.get('fix_title', 'Proposed Fix')
+    fix_description = fix.get('fix_description', '')
+    tools = fix.get('tools_to_use', [])
+    action_steps = fix.get('action_steps', [])
+
+    # Build action steps string (for internal use only)
+    steps_str = ""
+    for idx, step in enumerate(action_steps, 1):
+        steps_str += f"{idx}. {step}\n"
+
+    # Determine template type based on category and tools
+    tools_lower = str(tools).lower()
+
+    # Check if this is a customer-facing email (promotional, thank you, etc.)
+    is_customer_email = 'customer_email' in tools_lower or 'generate_customer_email' in tools_lower
+
+    # Determine email type from fix context
+    email_type = 'promotion'  # Default
+    if 'thank' in fix_description.lower():
+        email_type = 'thank_you'
+    elif 'reactivat' in fix_description.lower() or 'inactive' in fix_description.lower():
+        email_type = 'reactivation'
+    elif 'promotion' in fix_description.lower() or 'discount' in fix_description.lower():
+        email_type = 'promotion'
+
+    if is_customer_email:
+        # CUSTOMER-FACING EMAIL - Must be professional and promotional
+        # NEVER expose internal business issues to customers
+        template_content = load_template_file('customer_email_template.txt')
+
+        if template_content:
+            # Generate appropriate customer-friendly content based on email type
+            if email_type == 'promotion':
+                context = """We wanted to reach out with an exclusive offer just for you!
+
+As a valued customer of Misty Jazz Records, we're excited to share some special promotions:
+
+🎵 **Special Offers Available Now:**
+• 15% off your next purchase with code JAZZ15
+• Free shipping on orders over $50
+• Early access to new vinyl arrivals
+
+Browse our latest collection of rare jazz pressings, classic albums, and new releases.
+Whether you're looking for Miles Davis, John Coltrane, or discovering new artists,
+we have something special waiting for you.
+
+Visit us today and rediscover the joy of vinyl!"""
+
+            elif email_type == 'reactivation':
+                context = """We've missed you at Misty Jazz Records!
+
+It's been a while since your last visit, and we wanted to let you know about
+some exciting additions to our collection.
+
+🎵 **Welcome Back Offer:**
+• Exclusive 20% discount on your next order with code WELCOMEBACK
+• New arrivals from your favorite artists
+• Rare finds and limited pressings now in stock
+
+As a token of our appreciation for your loyalty, we'd love to welcome you back
+with this special offer. Our curated selection of jazz vinyl continues to grow,
+and we think you'll love what's new.
+
+We hope to see you again soon!"""
+
+            elif email_type == 'thank_you':
+                context = """Thank you for being a valued customer of Misty Jazz Records!
+
+We truly appreciate your continued support of our store and your passion for
+quality vinyl records.
+
+🎵 **As a Thank You:**
+• Enjoy 10% off your next purchase with code THANKYOU10
+• Be the first to know about new arrivals
+• Exclusive access to our collector's newsletter
+
+Your support helps us continue curating the finest jazz vinyl collection.
+We're committed to bringing you the best in classic and contemporary jazz recordings.
+
+Thank you for being part of our community!"""
+
+            else:
+                context = """We have some exciting news to share with you!
+
+At Misty Jazz Records, we're always working to bring you the best selection
+of jazz vinyl records.
+
+🎵 **What's New:**
+• Fresh arrivals from legendary artists
+• Expanded collection of rare pressings
+• Special member-only offers
+
+Check out our latest additions and discover your next favorite album.
+Our team is always here to help you find exactly what you're looking for.
+
+Happy listening!"""
+
+            template = template_content.format(
+                email="[customer_email]",
+                subject=f"Special Offer from Misty Jazz Records" if email_type == 'promotion' else f"We Miss You at Misty Jazz Records" if email_type == 'reactivation' else "Thank You from Misty Jazz Records",
+                first_name="[Customer]",
+                last_name="",
+                context=context
+            )
+        else:
+            # Fallback customer email template
+            template = f"""EMAIL TEMPLATE GENERATED
+========================
+
+To: [customer_email]
+Subject: Special Offer from Misty Jazz Records
+
+Dear Valued Customer,
+
+We hope this email finds you well!
+
+At Misty Jazz Records, we're committed to bringing you the finest selection
+of jazz vinyl records. We wanted to share some exciting offers with you:
+
+🎵 Special Promotion: 15% off your next purchase with code JAZZ15
+🎵 Free shipping on orders over $50
+🎵 New arrivals added weekly
+
+Thank you for being part of our community of jazz enthusiasts.
+
+Best regards,
+Misty Jazz Records Team
+
+========================
+Note: This is a generated template. Review before sending.
+"""
+
+    elif category == 'inventory' or 'inventory' in tools_lower or 'restock' in tools_lower:
+        # INTERNAL: Inventory alert to staff
+        template_content = load_template_file('inventory_alert_email_template.txt')
+
+        if template_content:
+            # Build items list for the template (internal details OK)
+            items_list = f"""
+ISSUE IDENTIFIED: {title}
+
+DETAILS:
+{description}
+
+RECOMMENDED ACTION:
+{fix_description}
+
+ACTION STEPS:
+{steps_str}
+EXPECTED OUTCOME: {fix.get('expected_outcome', 'Issue resolution')}
+"""
+            template = template_content.format(items_list=items_list)
+        else:
+            template = f"""INVENTORY ALERT EMAIL
+=====================
+
+To: inventory@mistyjazzrecords.com
+Subject: LOW STOCK ALERT - Action Required
+
+Dear Inventory Manager,
+
+{description}
+
+RECOMMENDED ACTION:
+{fix_description}
+
+ACTION STEPS:
+{steps_str}
+Please review and place restock orders as soon as possible to avoid stockouts.
+
+Best regards,
+Misty AI Business Intelligence System
+=====================
+"""
+
+    elif category == 'payments' or category == 'financial' or 'cancel' in tools_lower or 'transaction' in tools_lower:
+        # INTERNAL: Payment/financial alert to staff
+        template_content = load_template_file('transaction_cancelled_template.txt')
+
+        if template_content:
+            # Use the actual template format
+            template = template_content.format(
+                payment_id="[PAYMENT_ID]",
+                order_id="[ORDER_ID]",
+                amount="[AMOUNT]",
+                previous_status="[PREVIOUS_STATUS]",
+                reason=fix_description
+            )
+            # Add context header
+            template = f"""INTERNAL FINANCIAL ALERT
+====================
+Issue: {title}
+Severity: {issue.get('severity', 'medium').upper()}
+
+{template}
+
+ACTION STEPS:
+{steps_str}
+EXPECTED OUTCOME: {fix.get('expected_outcome', 'Issue resolution')}
+"""
+        else:
+            template = f"""PAYMENT/FINANCIAL ALERT
+======================
+
+To: finance@mistyjazzrecords.com
+Subject: FINANCIAL ISSUE - Action Required
+
+{description}
+
+RECOMMENDED ACTION:
+{fix_description}
+
+ACTION STEPS:
+{steps_str}
+Please investigate and resolve this issue promptly.
+
+Best regards,
+Misty AI Business Intelligence System
+======================
+"""
+
+    elif 'restock' in tools_lower or 'recommend' in tools_lower:
+        # INTERNAL: Restock recommendation to staff
+        template_content = load_template_file('restock_recommendation_template.txt')
+
+        if template_content:
+            template = template_content.format(
+                title="[ALBUM_TITLE]",
+                artist="[ARTIST]",
+                current_stock="[CURRENT_QTY]",
+                total_sold="[TOTAL_SOLD]",
+                recommended_qty="[RECOMMENDED_QTY]",
+                rationale=fix_description
+            )
+            # Add context header
+            template = f"""INTERNAL RESTOCK ALERT
+======================
+Issue: {title}
+
+{template}
+
+ACTION STEPS:
+{steps_str}
+"""
+        else:
+            template = f"""RESTOCK RECOMMENDATION
+======================
+
+{description}
+
+RECOMMENDED ACTION:
+{fix_description}
+
+ACTION STEPS:
+{steps_str}
+======================
+"""
+
+    else:
+        # INTERNAL: Generic operations template (fallback) - to staff only
+        template = f"""INTERNAL OPERATIONS ALERT
+========================
+
+To: operations@mistyjazzrecords.com
+Subject: ACTION REQUIRED - Business Issue Detected
+
+Dear Operations Team,
+
+An automated business analysis has detected an issue requiring attention:
+
+ISSUE: {title}
+SEVERITY: {issue.get('severity', 'medium').upper()}
+CATEGORY: {category.upper()}
+
+DETAILS:
+{description}
+
+RECOMMENDED FIX: {fix_title}
+{fix_description}
+
+ACTION STEPS:
+{steps_str}
+EXPECTED OUTCOME:
+{fix.get('expected_outcome', 'Issue resolution')}
+
+Please review and take appropriate action.
+
+Best regards,
+Misty AI Business Intelligence System
+========================
+"""
+
+    return template
 
 
 def display_fixes_results(result):

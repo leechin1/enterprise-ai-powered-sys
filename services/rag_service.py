@@ -10,14 +10,17 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client, Client
-from google import genai
-from langchain_google_genai import ChatGoogleGenerativeAI
+import vertexai
+from vertexai.language_models import TextEmbeddingModel
+from langchain_google_vertexai import ChatVertexAI
 from langfuse import observe
 
 load_dotenv()
 
 # Configuration
-MODEL = os.getenv('GEMINI_MODEL')
+MODEL = os.getenv('VERTEX_MODEL', 'gemini-2.0-flash')
+PROJECT_ID = os.getenv('GCP_PROJECT_ID')
+LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
 EMBEDDING_MODEL = "text-embedding-004"
 CHUNK_SIZE = 1000  # Characters per chunk
 CHUNK_OVERLAP = 200  # Overlap between chunks
@@ -43,13 +46,18 @@ class RAGService:
 
         self.supabase: Client = create_client(supabase_url, supabase_key)
 
-        # Initialize Google AI client for embeddings
-        self.genai_client = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
+        # Initialize Vertex AI
+        if PROJECT_ID:
+            vertexai.init(project=PROJECT_ID, location=LOCATION)
 
-        # Initialize LLM for chat
-        self.llm = ChatGoogleGenerativeAI(
+        # Initialize embedding model via Vertex AI
+        self.embedding_model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
+
+        # Initialize LLM for chat via Vertex AI (uses GCP credits)
+        self.llm = ChatVertexAI(
             model=MODEL,
-            api_key=os.getenv('GEMINI_API_KEY'),
+            project=PROJECT_ID,
+            location=LOCATION,
             temperature=0.7,
         )
 
@@ -115,7 +123,7 @@ Be concise but thorough. Maintain a professional, helpful tone."""
 
     def _generate_embedding(self, text: str) -> List[float]:
         """
-        Generate embedding for text using Google's embedding model
+        Generate embedding for text using Vertex AI's embedding model
 
         Args:
             text: Text to embed
@@ -123,15 +131,12 @@ Be concise but thorough. Maintain a professional, helpful tone."""
         Returns:
             Embedding vector as list of floats
         """
-        result = self.genai_client.models.embed_content(
-            model=EMBEDDING_MODEL,
-            contents=text,
-        )
-        return result.embeddings[0].values
+        embeddings = self.embedding_model.get_embeddings([text])
+        return embeddings[0].values
 
     def _generate_query_embedding(self, query: str) -> List[float]:
         """
-        Generate embedding for a search query
+        Generate embedding for a search query using Vertex AI
 
         Args:
             query: Search query text
@@ -139,11 +144,8 @@ Be concise but thorough. Maintain a professional, helpful tone."""
         Returns:
             Embedding vector as list of floats
         """
-        result = self.genai_client.models.embed_content(
-            model=EMBEDDING_MODEL,
-            contents=query,
-        )
-        return result.embeddings[0].values
+        embeddings = self.embedding_model.get_embeddings([query])
+        return embeddings[0].values
 
     def index_document(self, document_path: str, metadata: Optional[Dict] = None) -> Dict[str, Any]:
         """

@@ -7,7 +7,7 @@ Enhanced with Pydantic schemas for structured outputs
 import os
 from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_vertexai import ChatVertexAI
 from langchain.agents import create_agent
 from langsmith import traceable
 from langfuse import observe
@@ -49,7 +49,9 @@ from services.tools.business_generation_tools import (
 
 load_dotenv()
 
-MODEL=os.getenv('GEMINI_MODEL')
+MODEL = os.getenv('VERTEX_MODEL', 'gemini-2.0-flash')
+PROJECT_ID = os.getenv('GCP_PROJECT_ID')
+LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
 
 # Silence OpenTelemetry (Langfuse) errors
 logging.getLogger("opentelemetry.sdk._shared_internal").setLevel(logging.CRITICAL)
@@ -59,10 +61,11 @@ class AIBusinessConsultantAgent:
     """AI agent that analyzes business data using LangChain agent architecture with structured outputs"""
 
     def __init__(self):
-        # Initialize Gemini model via LangChain
-        self.llm = ChatGoogleGenerativeAI(
+        # Initialize Vertex AI model (uses GCP credits)
+        self.llm = ChatVertexAI(
             model=MODEL,
-            api_key=os.getenv('GEMINI_API_KEY'),
+            project=PROJECT_ID,
+            location=LOCATION,
             temperature=0.7,
         )
 

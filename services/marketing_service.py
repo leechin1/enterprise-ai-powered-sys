@@ -12,8 +12,8 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 import pandas as pd
 from datetime import datetime, timedelta
-from google import genai
-from google.genai import types
+import vertexai
+from vertexai.generative_models import GenerativeModel, GenerationConfig
 from langfuse import observe
 from services.schemas.marketing_schemas import MarketingEmailOutput
 from services.prompts import load_system_instructions
@@ -23,17 +23,20 @@ load_dotenv()
 # Silence OpenTelemetry (Langfuse) errors
 logging.getLogger("opentelemetry.sdk._shared_internal").setLevel(logging.CRITICAL)
 
-MODEL=os.getenv("GEMINI_MODEL")
+# Vertex AI Configuration
+MODEL = os.getenv('VERTEX_MODEL', 'gemini-2.0-flash')
+PROJECT_ID = os.getenv('GCP_PROJECT_ID')
+LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
 class MarketingService:
     """Handle marketing-specific queries and email generation"""
 
     def __init__(self):
         self.client: Optional[Client] = None
-        self.gemini_client = None
+        self.vertex_model = None
         self._connect()
 
     def _connect(self):
-        """Connect to Supabase and Gemini"""
+        """Connect to Supabase and Vertex AI"""
         try:
             supabase_url = os.getenv('SUPABASE_URL')
             supabase_key = os.getenv('SUPABASE_SECRET_KEY')
@@ -43,10 +46,13 @@ class MarketingService:
 
             self.client = create_client(supabase_url, supabase_key)
 
-            # Initialize Gemini
-            gemini_api_key = os.getenv('GEMINI_API_KEY')
-            if gemini_api_key:
-                self.gemini_client = genai.Client(api_key=gemini_api_key)
+            # Initialize Vertex AI
+            if PROJECT_ID:
+                vertexai.init(project=PROJECT_ID, location=LOCATION)
+                self.vertex_model = GenerativeModel(
+                    MODEL,
+                    system_instruction=load_system_instructions('marketing_email_system_instructions.txt')
+                )
 
         except Exception as e:
             print(f"Failed to connect to services: {e}")
@@ -371,8 +377,8 @@ class MarketingService:
         Returns:
             Generated email text or None if failed
         """
-        if not self.gemini_client:
-            raise ValueError("Gemini API key not configured")
+        if not self.vertex_model:
+            raise ValueError("Vertex AI model not configured - check GCP_PROJECT_ID")
 
         if segment_data.empty:
             raise ValueError("No customer data provided")
@@ -435,17 +441,15 @@ CRITICAL FORMATTING RULES:
 
         for attempt in range(max_retries):
             try:
-                generation_config = types.GenerateContentConfig(
-                    system_instruction=load_system_instructions('marketing_email_system_instructions.txt'),
+                generation_config = GenerationConfig(
                     temperature=0.8,
                     top_p=0.95,
                     top_k=40,
                 )
 
-                response = self.gemini_client.models.generate_content(
-                    model=MODEL,
-                    contents=email_prompt,
-                    config=generation_config
+                response = self.vertex_model.generate_content(
+                    email_prompt,
+                    generation_config=generation_config
                 )
 
                 # Extract and validate the email content
