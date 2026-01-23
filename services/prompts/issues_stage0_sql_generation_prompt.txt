@@ -6,10 +6,10 @@ Based on the database schema provided, generate 5-10 SQL queries to investigate 
 
 **ANALYSIS AREAS TO INVESTIGATE:**
 1. Inventory Problems (out of stock, low stock, slow-moving items)
-2. Payment Issues (failed payments, pending payments, refund patterns)
-3. Customer Service Problems (negative reviews, complaint patterns)
+2. Payment Issues (failed payments, pending payments, refund patterns) - **MUST JOIN with orders and customers to get customer name and email**
+3. Customer Service Problems (negative reviews, complaint patterns) - **MUST include customer name and email**
 4. Revenue Issues (declining sales, underperforming products/genres)
-5. Operational Bottlenecks (order fulfillment delays, data quality)
+5. Operational Bottlenecks (order fulfillment delays, data quality) - **include customer contact info for order-related queries**
 6. Financial Health (cash flow, payment method problems)
 
 **REQUIREMENTS:**

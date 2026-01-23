@@ -530,7 +530,7 @@ def display_issues_results(result, issues_agent=None):
 
 
 def display_fix_modal(issue_num: int, issue: dict, fix_result: dict):
-    """Display a modal/dialog with the proposed fix and email template preview"""
+    """Display a modal/dialog with the proposed fix - fully automated, ready for approval"""
 
     if not fix_result.get('success'):
         st.error(f"❌ Fix generation failed: {fix_result.get('error', 'Unknown error')}")
@@ -546,41 +546,43 @@ def display_fix_modal(issue_num: int, issue: dict, fix_result: dict):
     # Modal-like container
     st.markdown("---")
     with st.container(border=True):
-        st.markdown(f"### 🔧 Proposed Fix for Issue #{issue_num}")
-        st.caption(f"Model: {fix_result.get('model', 'unknown')}")
+        st.markdown(f"### 🔧 Automated Fix for Issue #{issue_num}")
+        st.caption(f"AI-generated solution ready for approval | Model: {fix_result.get('model', 'unknown')}")
 
-        # Fix details
-        col1, col2 = st.columns(2)
+        # Priority badge
+        priority = fix.get('priority', 'scheduled')
+        priority_colors = {"immediate": "🔴", "urgent": "🟠", "scheduled": "🟢"}
+        priority_emoji = priority_colors.get(priority, "⚪")
 
+        # Header with fix title and priority
+        col1, col2 = st.columns([3, 1])
         with col1:
-            st.markdown(f"**Fix Title:** {fix.get('fix_title', 'N/A')}")
-            st.markdown(f"**Priority:** {fix.get('priority', 'N/A').title()}")
-
+            st.markdown(f"#### {fix.get('fix_title', 'Proposed Fix')}")
         with col2:
-            tools = fix.get('tools_to_use', [])
-            if tools:
-                st.markdown(f"**Tools:** {', '.join([f'`{t}`' for t in tools])}")
-            st.markdown(f"**Expected Outcome:** {fix.get('expected_outcome', 'N/A')}")
+            st.markdown(f"**Priority:** {priority_emoji} {priority.title()}")
 
+        # Executive Summary
         st.markdown("---")
-        st.markdown("**Description:**")
-        st.markdown(fix.get('fix_description', 'N/A'))
+        st.markdown("**📋 Executive Summary**")
+        st.info(fix.get('fix_description', 'N/A'))
 
-        # Action steps
-        action_steps = fix.get('action_steps', [])
-        if action_steps:
-            st.markdown("**Action Steps:**")
-            for step_idx, step in enumerate(action_steps, 1):
-                st.markdown(f"{step_idx}. {step}")
+        # What will happen when approved
+        automated_actions = fix.get('automated_actions', fix.get('action_steps', []))
+        if automated_actions:
+            st.markdown("**⚡ Automated Actions (upon approval):**")
+            for action in automated_actions:
+                st.markdown(f"   ✓ {action}")
 
-        # Recipients table (if any)
+        # Expected Outcome
+        st.markdown(f"**📈 Expected Outcome:** {fix.get('expected_outcome', 'N/A')}")
+
+        # Recipients table
         recipients = fix.get('recipients', [])
         if recipients:
             st.markdown("---")
             st.markdown("### 👥 Recipients")
-            st.caption(f"{len(recipients)} recipient(s) will receive communications for this fix")
+            st.caption(f"{len(recipients)} recipient(s) will receive communications")
 
-            # Build recipients table data
             recipients_data = []
             for r in recipients:
                 role_emoji = {
@@ -597,42 +599,82 @@ def display_fix_modal(issue_num: int, issue: dict, fix_result: dict):
                     "Reason": r.get('reason', 'N/A')
                 })
 
-            # Display as dataframe table
             df = pd.DataFrame(recipients_data)
             st.dataframe(df, use_container_width=True, hide_index=True)
 
-        st.markdown("---")
+        # Pre-generated Emails (the key new feature)
+        generated_emails = fix.get('generated_emails', [])
+        if generated_emails:
+            st.markdown("---")
+            st.markdown("### 📧 Pre-Generated Emails (Ready to Send)")
+            st.caption("These emails will be sent automatically upon approval")
 
-        # Generate email template based on issue category
-        st.markdown("### 📧 Proposed Action Template")
+            for idx, email in enumerate(generated_emails, 1):
+                email_type = email.get('email_type', 'notification')
+                type_icons = {
+                    "customer_notification": "👤",
+                    "inventory_alert": "📦",
+                    "payment_followup": "💳",
+                    "management_report": "📊"
+                }
+                icon = type_icons.get(email_type, "📧")
 
-        category = issue.get('category', 'operations')
-        template_content = generate_fix_template(issue, fix, category)
+                with st.expander(f"{icon} Email {idx}: {email.get('subject', 'No Subject')}", expanded=(idx == 1)):
+                    # Email metadata
+                    recipient_emails = email.get('recipient_emails', [])
+                    st.markdown(f"**To:** {', '.join(recipient_emails) if recipient_emails else 'N/A'}")
+                    st.markdown(f"**Subject:** {email.get('subject', 'N/A')}")
+                    st.markdown("**Body:**")
 
-        # Display template in a text area (read-only style)
-        st.code(template_content, language=None)
+                    # Display email body in a styled container
+                    st.text_area(
+                        label="Email Content",
+                        value=email.get('body', 'No content'),
+                        height=250,
+                        disabled=True,
+                        key=f"email_body_{issue_num}_{idx}",
+                        label_visibility="collapsed"
+                    )
+        else:
+            # Fallback: generate template from old method if no pre-generated emails
+            st.markdown("---")
+            st.markdown("### 📧 Proposed Action Template")
+            category = issue.get('category', 'operations')
+            template_content = generate_fix_template(issue, fix, category)
+            st.code(template_content, language=None)
 
         # Action buttons
-        st.markdown("")
+        st.markdown("---")
         col_cancel, col_spacer, col_accept = st.columns([1, 2, 1])
 
         with col_cancel:
-            if st.button("❌ Cancel", key=f"cancel_fix_modal_{issue_num}", use_container_width=True):
+            if st.button("❌ Decline", key=f"cancel_fix_modal_{issue_num}", use_container_width=True):
                 st.session_state[f'show_fix_modal_{issue_num}'] = False
                 st.session_state[f'fix_result_{issue_num}'] = None
                 st.rerun()
 
         with col_accept:
-            if st.button("✅ Accept & Execute", key=f"accept_fix_{issue_num}", use_container_width=True, type="primary"):
-                # Show success animation
+            email_count = len(generated_emails) if generated_emails else 0
+            recipient_count = len(recipients)
+            button_label = f"✅ Approve & Send ({email_count} emails to {recipient_count} recipients)" if email_count > 0 else "✅ Approve Fix"
+
+            if st.button(button_label, key=f"accept_fix_{issue_num}", use_container_width=True, type="primary"):
                 st.session_state[f'show_fix_modal_{issue_num}'] = False
                 st.session_state[f'fix_executed_{issue_num}'] = True
                 st.rerun()
 
     # Show success message if fix was executed
     if st.session_state.get(f'fix_executed_{issue_num}'):
-        st.success(f"✅ Fix for Issue #{issue_num} has been executed successfully!")
+        email_count = len(fix.get('generated_emails', []))
+        recipient_count = len(fix.get('recipients', []))
+
+        if email_count > 0:
+            st.success(f"✅ Fix approved! {email_count} email(s) sent to {recipient_count} recipient(s).")
+        else:
+            st.success(f"✅ Fix for Issue #{issue_num} has been approved and executed!")
+
         st.balloons()
+
         # Clear the flag after showing
         if st.button("👍 Acknowledge", key=f"ack_fix_{issue_num}"):
             st.session_state[f'fix_executed_{issue_num}'] = False

@@ -107,8 +107,18 @@ class Recipient(BaseModel):
     reason: str = Field(..., description="Why this person is receiving the communication", min_length=10, max_length=200)
 
 
+class GeneratedEmail(BaseModel):
+    """A pre-generated email ready to be sent"""
+    email_type: Literal["customer_notification", "inventory_alert", "payment_followup", "management_report"] = Field(
+        ..., description="Type of email being sent"
+    )
+    subject: str = Field(..., description="Email subject line", min_length=5, max_length=150)
+    body: str = Field(..., description="Complete email body content, ready to send", min_length=50, max_length=3000)
+    recipient_emails: List[str] = Field(..., description="List of email addresses to send to", min_length=1)
+
+
 class BusinessFix(BaseModel):
-    """A specific fix for a business issue"""
+    """A specific fix for a business issue - fully automated with pre-generated communications"""
     issue_id: str = Field(..., description="Issue title or ID being addressed", min_length=5, max_length=100)
     fix_title: str = Field(..., description="Clear action-oriented title for the fix", min_length=5, max_length=100)
     fix_description: str = Field(
@@ -117,13 +127,9 @@ class BusinessFix(BaseModel):
         min_length=50,
         max_length=1000
     )
-    tools_to_use: List[str] = Field(
-        default_factory=list,
-        description="List of tool names to execute (e.g., ['generate_customer_email', 'cancel_transaction'])"
-    )
-    action_steps: List[str] = Field(
+    automated_actions: List[str] = Field(
         ...,
-        description="Step-by-step action plan",
+        description="List of automated actions that WILL be executed upon approval",
         min_length=1,
         max_length=10
     )
@@ -139,6 +145,10 @@ class BusinessFix(BaseModel):
     recipients: List[Recipient] = Field(
         default_factory=list,
         description="List of people who will receive emails/communications for this fix"
+    )
+    generated_emails: List[GeneratedEmail] = Field(
+        default_factory=list,
+        description="Pre-generated emails ready to be sent upon approval"
     )
 
 
