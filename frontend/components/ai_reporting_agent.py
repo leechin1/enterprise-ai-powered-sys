@@ -16,6 +16,37 @@ from utils.db_analytics import AnalyticsConnector
 from services.ai_health_agent import AIHealthAgent
 from services.ai_issues_agent import AIIssuesAgent
 
+# Import email and activity log services
+try:
+    from services.email_service import get_email_service
+    EMAIL_SERVICE_AVAILABLE = True
+except Exception as e:
+    EMAIL_SERVICE_AVAILABLE = False
+    print(f"Email service not available: {e}")
+
+try:
+    from services.activity_log_service import get_activity_log_service
+    ACTIVITY_LOG_AVAILABLE = True
+except Exception as e:
+    ACTIVITY_LOG_AVAILABLE = False
+    print(f"Activity log service not available: {e}")
+
+
+def log_activity(action_type: str, description: str, category: str = "ai_reporting", **kwargs):
+    """Helper function to log activities"""
+    if ACTIVITY_LOG_AVAILABLE:
+        try:
+            activity_service = get_activity_log_service()
+            activity_service.log_activity(
+                action_type=action_type,
+                description=description,
+                category=category,
+                metadata=kwargs.get('metadata'),
+                status=kwargs.get('status', 'success')
+            )
+        except Exception as e:
+            print(f"Failed to log activity: {e}")
+
 
 def render_ai_reporting_agent():
     """Render AI Business Intelligence Reporting page with new agent architecture"""
@@ -78,6 +109,19 @@ def render_health_tab(health_agent):
         with st.spinner("🧠 AI Agent is analyzing your business health..."):
             health_result = health_agent.analyze_business_health()
             st.session_state.health_cache = health_result
+
+            # Log the health analysis
+            insights_count = len(health_result.get('data', {}).get('insights', []))
+            log_activity(
+                action_type="health_analysis",
+                description=f"Business health analysis completed with {insights_count} insights",
+                category="ai_reporting",
+                metadata={
+                    "insights_count": insights_count,
+                    "model": health_result.get('model', 'unknown'),
+                    "success": health_result.get('success', False)
+                }
+            )
             st.rerun()
 
     # Display results if available
@@ -128,6 +172,19 @@ def render_issues_tab(issues_agent):
                 st.session_state.issues_cache = None  # Clear previous results
                 st.session_state.fixes_cache = None
                 st.session_state.loaded_from_saved = False
+
+                # Log SQL generation
+                query_count = len(sql_result.get('data', {}).get('queries', []))
+                log_activity(
+                    action_type="sql_generated",
+                    description=f"Generated {query_count} SQL queries for business analysis",
+                    category="ai_reporting",
+                    metadata={
+                        "query_count": query_count,
+                        "model": sql_result.get('model', 'unknown'),
+                        "success": sql_result.get('success', False)
+                    }
+                )
                 st.rerun()
 
     with col2:
@@ -350,12 +407,37 @@ def display_sql_queries(sql_result, issues_agent, analytics=None):
                 st.error(f"❌ Query execution failed: {execution_result.get('error', 'Unknown error')}")
                 return
 
+            # Log SQL execution
+            log_activity(
+                action_type="sql_executed",
+                description=f"Executed {execution_result['successful_queries']}/{execution_result['total_queries']} SQL queries",
+                category="ai_reporting",
+                metadata={
+                    "total_queries": execution_result['total_queries'],
+                    "successful_queries": execution_result['successful_queries']
+                },
+                status="success" if execution_result['successful_queries'] == execution_result['total_queries'] else "partial"
+            )
+
             # Show execution summary
             st.success(f"✅ Executed {execution_result['successful_queries']}/{execution_result['total_queries']} queries successfully!")
 
             # Analyze results with Stage 1 agent
             query_results = execution_result['results']
             issues_result = issues_agent.identify_business_issues(query_results)
+
+            # Log issue identification
+            issues_count = len(issues_result.get('data', {}).get('issues', []))
+            log_activity(
+                action_type="issue_identified",
+                description=f"Identified {issues_count} business issues",
+                category="issues",
+                metadata={
+                    "issues_count": issues_count,
+                    "model": issues_result.get('model', 'unknown'),
+                    "success": issues_result.get('success', False)
+                }
+            )
 
             st.session_state.issues_cache = issues_result
             st.session_state.query_results_cache = query_results  # Store for reference
@@ -519,6 +601,23 @@ def display_issues_results(result, issues_agent=None):
                     # Generate fix for this specific issue (pass query results for recipient extraction)
                     query_results = st.session_state.get('query_results_cache', [])
                     fix_result = issues_agent.propose_fixes([issue], query_results)
+
+                    # Log fix proposal
+                    fix_data = fix_result.get('data', {}).get('fixes', [{}])[0] if fix_result.get('success') else {}
+                    log_activity(
+                        action_type="fix_proposed",
+                        description=f"Fix proposed for issue: {issue.get('title', 'Unknown')}",
+                        category="fixes",
+                        metadata={
+                            "issue_title": issue.get('title'),
+                            "fix_title": fix_data.get('fix_title', 'Unknown'),
+                            "recipients_count": len(fix_data.get('recipients', [])),
+                            "emails_count": len(fix_data.get('generated_emails', [])),
+                            "model": fix_result.get('model', 'unknown'),
+                            "success": fix_result.get('success', False)
+                        }
+                    )
+
                     st.session_state[f'fix_result_{i}'] = fix_result
                     st.session_state[f'generating_fix_{i}'] = False
                     st.session_state[f'show_fix_modal_{i}'] = True
@@ -649,6 +748,17 @@ def display_fix_modal(issue_num: int, issue: dict, fix_result: dict):
 
         with col_cancel:
             if st.button("❌ Decline", key=f"cancel_fix_modal_{issue_num}", use_container_width=True):
+                # Log the decline
+                log_activity(
+                    action_type="fix_declined",
+                    description=f"Fix declined for issue: {issue.get('title', 'Unknown')}",
+                    category="fixes",
+                    metadata={
+                        "issue_title": issue.get('title'),
+                        "fix_title": fix.get('fix_title')
+                    },
+                    status="declined"
+                )
                 st.session_state[f'show_fix_modal_{issue_num}'] = False
                 st.session_state[f'fix_result_{issue_num}'] = None
                 st.rerun()
@@ -659,17 +769,85 @@ def display_fix_modal(issue_num: int, issue: dict, fix_result: dict):
             button_label = f"✅ Approve & Send ({email_count} emails to {recipient_count} recipients)" if email_count > 0 else "✅ Approve Fix"
 
             if st.button(button_label, key=f"accept_fix_{issue_num}", use_container_width=True, type="primary"):
+                # Send emails if available
+                emails_sent = 0
+                emails_failed = 0
+
+                if email_count > 0 and EMAIL_SERVICE_AVAILABLE:
+                    email_service = get_email_service()
+
+                    with st.spinner("📧 Sending emails..."):
+                        result = email_service.send_fix_emails(generated_emails, recipients)
+                        emails_sent = result.get('sent', 0)
+                        emails_failed = result.get('failed', 0)
+
+                        # Log each email
+                        for email_result in result.get('results', []):
+                            if email_result['result'].get('success'):
+                                log_activity(
+                                    action_type="email_sent",
+                                    description=f"Email sent to {email_result['to_email']}",
+                                    category="email",
+                                    metadata={
+                                        "to_email": email_result['to_email'],
+                                        "placebo_mode": result.get('placebo_mode', True)
+                                    }
+                                )
+                            else:
+                                log_activity(
+                                    action_type="email_failed",
+                                    description=f"Email failed to {email_result['to_email']}: {email_result['result'].get('error', 'Unknown')}",
+                                    category="email",
+                                    metadata={
+                                        "to_email": email_result['to_email'],
+                                        "error": email_result['result'].get('error')
+                                    },
+                                    status="failed"
+                                )
+
+                # Log the fix approval
+                log_activity(
+                    action_type="fix_approved",
+                    description=f"Fix approved: {fix.get('fix_title', 'Unknown')}",
+                    category="fixes",
+                    metadata={
+                        "issue_title": issue.get('title'),
+                        "fix_title": fix.get('fix_title'),
+                        "emails_sent": emails_sent,
+                        "emails_failed": emails_failed,
+                        "recipients_count": recipient_count
+                    }
+                )
+
                 st.session_state[f'show_fix_modal_{issue_num}'] = False
                 st.session_state[f'fix_executed_{issue_num}'] = True
+                st.session_state[f'fix_email_results_{issue_num}'] = {
+                    'sent': emails_sent,
+                    'failed': emails_failed,
+                    'total': email_count
+                }
                 st.rerun()
 
     # Show success message if fix was executed
     if st.session_state.get(f'fix_executed_{issue_num}'):
-        email_count = len(fix.get('generated_emails', []))
+        email_results = st.session_state.get(f'fix_email_results_{issue_num}', {})
+        emails_sent = email_results.get('sent', 0)
+        emails_failed = email_results.get('failed', 0)
+        email_total = email_results.get('total', 0)
         recipient_count = len(fix.get('recipients', []))
 
-        if email_count > 0:
-            st.success(f"✅ Fix approved! {email_count} email(s) sent to {recipient_count} recipient(s).")
+        if email_total > 0:
+            if emails_failed == 0:
+                st.success(f"✅ Fix approved! {emails_sent} email(s) sent successfully to {recipient_count} recipient(s).")
+            else:
+                st.warning(f"⚠️ Fix approved! {emails_sent}/{email_total} email(s) sent. {emails_failed} failed.")
+
+            # Show placebo mode indicator
+            if EMAIL_SERVICE_AVAILABLE:
+                email_service = get_email_service()
+                status = email_service.get_status()
+                if status.get('placebo_mode'):
+                    st.info(f"📬 Placebo Mode: All emails were sent to {status.get('placebo_email', 'your email')} for testing.")
         else:
             st.success(f"✅ Fix for Issue #{issue_num} has been approved and executed!")
 
@@ -678,6 +856,7 @@ def display_fix_modal(issue_num: int, issue: dict, fix_result: dict):
         # Clear the flag after showing
         if st.button("👍 Acknowledge", key=f"ack_fix_{issue_num}"):
             st.session_state[f'fix_executed_{issue_num}'] = False
+            st.session_state[f'fix_email_results_{issue_num}'] = None
             st.rerun()
 
 

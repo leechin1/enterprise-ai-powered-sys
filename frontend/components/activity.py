@@ -1,10 +1,25 @@
 """
 Activity/Workflow Automation component for Misty AI Enterprise System
+Integrates with the activity log service for real activity tracking
 """
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+# Try to import the activity log service
+try:
+    from services.activity_log_service import get_activity_log_service
+    ACTIVITY_LOG_AVAILABLE = True
+except Exception as e:
+    ACTIVITY_LOG_AVAILABLE = False
+    print(f"Activity log service not available: {e}")
+
 
 def render_activity():
     """Render the activity and workflow automation interface"""
@@ -25,7 +40,8 @@ def render_activity():
 
     with col3:
         if st.button("📊 View Logs", use_container_width=True):
-            st.toast("Loading execution logs...")
+            st.session_state['show_activity_logs'] = True
+            st.rerun()
 
     with col4:
         if st.button("🔄 Refresh", use_container_width=True):
@@ -33,36 +49,69 @@ def render_activity():
 
     st.markdown("---")
 
+    # Get real activity summary if available
+    if ACTIVITY_LOG_AVAILABLE:
+        try:
+            activity_service = get_activity_log_service()
+            summary = activity_service.get_activity_summary(days=7)
+            recent_activities = activity_service.get_recent_activities(limit=50)
+
+            # Calculate metrics from real data
+            total_activities = summary.get('total_activities', 0)
+            success_count = summary.get('by_status', {}).get('success', 0)
+            failed_count = summary.get('by_status', {}).get('failed', 0)
+            success_rate = (success_count / total_activities * 100) if total_activities > 0 else 100
+
+            # Count by category
+            fixes_count = summary.get('by_category', {}).get('fixes', 0)
+            emails_count = summary.get('by_type', {}).get('email_sent', 0)
+            issues_count = summary.get('by_type', {}).get('issue_identified', 0)
+        except Exception as e:
+            st.warning(f"Could not load activity data: {e}")
+            total_activities = 0
+            success_rate = 100
+            fixes_count = 0
+            emails_count = 0
+            issues_count = 0
+            recent_activities = []
+    else:
+        total_activities = 0
+        success_rate = 100
+        fixes_count = 0
+        emails_count = 0
+        issues_count = 0
+        recent_activities = []
+
     # Metrics
     col1, col2, col3, col4, col5 = st.columns(5)
 
     with col1:
-        st.metric("Active Workflows", "12", "")
+        st.metric("Activities (7d)", f"{total_activities:,}", "")
 
     with col2:
-        st.metric("Executions (24h)", "6,412", "↑ 4.3%")
+        st.metric("Success Rate", f"{success_rate:.1f}%", "")
 
     with col3:
-        st.metric("Success Rate", "99.82%", "↑ 0.06%")
+        st.metric("Fixes Processed", f"{fixes_count:,}", "")
 
     with col4:
-        st.metric("Avg Duration", "412 ms", "")
+        st.metric("Emails Sent", f"{emails_count:,}", "")
 
     with col5:
-        st.metric("Tasks Automated", "847", "")
+        st.metric("Issues Found", f"{issues_count:,}", "")
 
     st.markdown("---")
 
     # Tabs
     tab1, tab2, tab3, tab4 = st.tabs([
-        "⚡ Recent Activity",
+        "⚡ Activity Log",
         "🔄 Active Workflows",
         "📈 Performance",
         "⚙️ Workflow Builder"
     ])
 
     with tab1:
-        render_recent_activity()
+        render_activity_log(recent_activities if ACTIVITY_LOG_AVAILABLE else None)
 
     with tab2:
         render_active_workflows()
@@ -74,142 +123,190 @@ def render_activity():
         render_workflow_builder()
 
 
-def render_recent_activity():
-    """Display recent automation executions"""
+def render_activity_log(activities=None):
+    """Display real activity logs from the database"""
 
-    st.subheader("Recent Automation Executions")
-    st.caption("Real-time activity across all automated workflows")
+    st.subheader("Activity Log")
+    st.caption("Real-time tracking of all system activities")
 
     # Filters
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        workflow_filter = st.selectbox(
-            "Filter by Workflow",
-            ["All Workflows", "Inventory Sync", "Customer Recommendations", "Order Processing", "Fraud Detection", "Report Generation"]
+        category_filter = st.selectbox(
+            "Filter by Category",
+            ["All", "ai_reporting", "email", "issues", "fixes", "knowledge", "analytics", "system"]
         )
 
     with col2:
         status_filter = st.multiselect(
             "Status",
-            ["Running", "Complete", "Error", "Blocked"],
-            default=["Running", "Complete", "Error", "Blocked"]
+            ["success", "failed", "pending", "declined"],
+            default=["success", "failed", "pending", "declined"]
         )
 
     with col3:
         time_range = st.selectbox(
             "Time Range",
-            ["Last Hour", "Last 24 Hours", "Last 7 Days", "Last 30 Days"]
+            ["Last 24 Hours", "Last 7 Days", "Last 30 Days", "All Time"]
         )
 
-    # Activity feed
-    activities = [
-        {
-            'timestamp': '2 min ago',
-            'workflow': 'Inventory Sync',
-            'execution_id': '#8724',
-            'description': 'Processing new vinyl shipment inventory sync with 245 records.',
-            'status': 'Running',
-            'duration': '45s',
-            'progress': 67
-        },
-        {
-            'timestamp': '5 min ago',
-            'workflow': 'Customer Recommendations',
-            'execution_id': '#8723',
-            'description': 'Generated personalized recommendations for 1,840 customers.',
-            'status': 'Complete',
-            'duration': '3m 12s',
-            'progress': 100
-        },
-        {
-            'timestamp': '12 min ago',
-            'workflow': 'Order Processing',
-            'execution_id': '#8722',
-            'description': 'Automated order fulfillment for 23 online purchases.',
-            'status': 'Complete',
-            'duration': '1m 34s',
-            'progress': 100
-        },
-        {
-            'timestamp': '18 min ago',
-            'workflow': 'Fraud Detection',
-            'execution_id': '#8721',
-            'description': 'Completed fraud detection scan on 1,200 transaction records.',
-            'status': 'Complete',
-            'duration': '2m 45s',
-            'progress': 100
-        },
-        {
-            'timestamp': '25 min ago',
-            'workflow': 'Supplier Integration',
-            'execution_id': '#8720',
-            'description': 'System awaiting supplier API response for rare vinyl acquisition.',
-            'status': 'Blocked',
-            'duration': '25m 12s',
-            'progress': 45
-        },
-        {
-            'timestamp': '1 hour ago',
-            'workflow': 'Customer Sentiment',
-            'execution_id': '#8719',
-            'description': 'Failed customer sentiment analysis during peak hours.',
-            'status': 'Error',
-            'duration': '12s',
-            'progress': 15
-        },
-        {
-            'timestamp': '2 hours ago',
-            'workflow': 'Data Archive',
-            'execution_id': '#8718',
-            'description': 'Archived 340 customer interactions after quality review.',
-            'status': 'Complete',
-            'duration': '8m 23s',
-            'progress': 100
-        },
-        {
-            'timestamp': '3 hours ago',
-            'workflow': 'Reorder Suggestions',
-            'execution_id': '#8717',
-            'description': 'AI-powered reorder suggestions generated for 87 low stock items.',
-            'status': 'Complete',
-            'duration': '4m 56s',
-            'progress': 100
-        },
-    ]
+    # Get activities from database
+    if ACTIVITY_LOG_AVAILABLE and activities is None:
+        try:
+            activity_service = get_activity_log_service()
+            activities = activity_service.get_recent_activities(
+                limit=100,
+                category=category_filter if category_filter != "All" else None
+            )
+        except Exception as e:
+            st.error(f"Failed to load activities: {e}")
+            activities = []
+
+    if not activities:
+        st.info("No activities recorded yet. Activities will appear here as you use the system.")
+
+        # Show example of what will appear
+        with st.expander("What gets logged?", expanded=False):
+            st.markdown("""
+            The activity log tracks:
+            - **Fixes Proposed**: When AI generates fix proposals
+            - **Fixes Approved/Declined**: When you approve or decline fixes
+            - **Emails Sent**: When emails are sent (in placebo mode, to your email)
+            - **Issues Identified**: When business issues are detected
+            - **SQL Queries**: When analysis queries are generated and executed
+            - **Knowledge Queries**: When RAG system is queried
+            - **Health Analysis**: When business health reports are generated
+            """)
+        return
+
+    # Filter activities
+    filtered_activities = []
+    for activity in activities:
+        # Apply category filter
+        if category_filter != "All" and activity.get('category') != category_filter:
+            continue
+        # Apply status filter
+        if activity.get('status') not in status_filter:
+            continue
+        filtered_activities.append(activity)
+
+    # Display activity count
+    st.caption(f"Showing {len(filtered_activities)} activities")
 
     # Display activity cards
-    for activity in activities:
-        if activity['status'] in status_filter:
-            status_colors = {
-                'Running': ('🔵', 'background-color: rgba(59, 130, 246, 0.1)'),
-                'Complete': ('🟢', 'background-color: rgba(16, 185, 129, 0.1)'),
-                'Error': ('🔴', 'background-color: rgba(239, 68, 68, 0.1)'),
-                'Blocked': ('🟠', 'background-color: rgba(245, 158, 11, 0.1)')
-            }
+    for activity in filtered_activities:
+        display_activity_card(activity)
 
-            icon, bg_color = status_colors[activity['status']]
 
-            st.markdown(
-                f"""
-                <div style="{bg_color}; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <strong>{icon} {activity['workflow']}</strong> - {activity['execution_id']}<br/>
-                            <span style="color: #94A3B8;">{activity['description']}</span><br/>
-                            <small style="color: #64748B;">⏱️ {activity['duration']} • 🕒 {activity['timestamp']}</small>
-                        </div>
-                        <div style="text-align: right;">
-                            <strong>{activity['status']}</strong>
-                        </div>
-                    </div>
+def display_activity_card(activity: dict):
+    """Display a single activity as a card"""
+
+    action_type = activity.get('action_type', 'unknown')
+    status = activity.get('status', 'unknown')
+    category = activity.get('category', 'system')
+    description = activity.get('description', 'No description')
+    created_at = activity.get('created_at', '')
+    metadata = activity.get('metadata', {})
+
+    # Format timestamp
+    try:
+        dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+        time_ago = get_time_ago(dt)
+        formatted_time = dt.strftime('%b %d, %Y %I:%M %p')
+    except:
+        time_ago = 'Unknown'
+        formatted_time = created_at
+
+    # Icons and colors based on type
+    type_icons = {
+        'fix_proposed': '🔧',
+        'fix_approved': '✅',
+        'fix_declined': '❌',
+        'email_sent': '📧',
+        'email_failed': '📧',
+        'issue_identified': '⚠️',
+        'sql_generated': '📝',
+        'sql_executed': '⚙️',
+        'health_analysis': '📊',
+        'document_indexed': '📄',
+        'rag_query': '🔍',
+        'system_event': '🔔'
+    }
+
+    status_colors = {
+        'success': ('🟢', 'rgba(16, 185, 129, 0.1)'),
+        'failed': ('🔴', 'rgba(239, 68, 68, 0.1)'),
+        'pending': ('🟡', 'rgba(245, 158, 11, 0.1)'),
+        'declined': ('🟠', 'rgba(251, 146, 60, 0.1)'),
+        'partial': ('🟡', 'rgba(245, 158, 11, 0.1)')
+    }
+
+    category_labels = {
+        'ai_reporting': 'AI Reporting',
+        'email': 'Email',
+        'issues': 'Issues',
+        'fixes': 'Fixes',
+        'knowledge': 'Knowledge',
+        'analytics': 'Analytics',
+        'system': 'System'
+    }
+
+    icon = type_icons.get(action_type, '📋')
+    status_icon, bg_color = status_colors.get(status, ('⚪', 'rgba(148, 163, 184, 0.1)'))
+    category_label = category_labels.get(category, category.title())
+
+    # Build metadata string
+    metadata_str = ""
+    if metadata:
+        if 'emails_sent' in metadata:
+            metadata_str += f" | 📧 {metadata['emails_sent']} emails"
+        if 'recipients_count' in metadata:
+            metadata_str += f" | 👥 {metadata['recipients_count']} recipients"
+        if 'query_count' in metadata:
+            metadata_str += f" | 📝 {metadata['query_count']} queries"
+        if 'model' in metadata:
+            metadata_str += f" | 🤖 {metadata['model']}"
+
+    st.markdown(
+        f"""
+        <div style="{bg_color}; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid {'#10B981' if status == 'success' else '#EF4444' if status == 'failed' else '#F59E0B'};">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div style="flex: 1;">
+                    <strong>{icon} {action_type.replace('_', ' ').title()}</strong>
+                    <span style="color: #64748B; font-size: 0.85em;"> • {category_label}</span><br/>
+                    <span style="color: #CBD5E1;">{description}</span><br/>
+                    <small style="color: #64748B;">🕒 {time_ago} ({formatted_time}){metadata_str}</small>
                 </div>
-                """,
-                unsafe_allow_html=True
-            )
+                <div style="text-align: right; min-width: 80px;">
+                    <span>{status_icon} {status.title()}</span>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-            if activity['status'] == 'Running':
-                st.progress(activity['progress'] / 100)
+
+def get_time_ago(dt: datetime) -> str:
+    """Get human-readable time ago string"""
+    now = datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now()
+    diff = now - dt
+
+    if diff.total_seconds() < 60:
+        return "Just now"
+    elif diff.total_seconds() < 3600:
+        minutes = int(diff.total_seconds() / 60)
+        return f"{minutes} min ago"
+    elif diff.total_seconds() < 86400:
+        hours = int(diff.total_seconds() / 3600)
+        return f"{hours} hour{'s' if hours > 1 else ''} ago"
+    elif diff.days == 1:
+        return "Yesterday"
+    elif diff.days < 7:
+        return f"{diff.days} days ago"
+    else:
+        return dt.strftime('%b %d')
 
 
 def render_active_workflows():
@@ -313,93 +410,141 @@ def render_workflow_performance():
 
     st.subheader("Workflow Performance Analytics")
 
-    # Execution trend
-    import plotly.graph_objects as go
-    from datetime import datetime, timedelta
+    # Get real data if available
+    if ACTIVITY_LOG_AVAILABLE:
+        try:
+            activity_service = get_activity_log_service()
+            summary = activity_service.get_activity_summary(days=30)
+
+            # Build chart from real data
+            by_type = summary.get('by_type', {})
+
+            if by_type:
+                # Activity types chart
+                types = list(by_type.keys())
+                counts = list(by_type.values())
+
+                fig = go.Figure(data=[go.Bar(
+                    x=types,
+                    y=counts,
+                    marker_color='#6366F1',
+                    text=counts,
+                    textposition='outside'
+                )])
+
+                fig.update_layout(
+                    title="Activities by Type (Last 30 Days)",
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font_color='#F1F5F9',
+                    height=300,
+                    margin=dict(l=0, r=0, t=40, b=0),
+                    xaxis=dict(showgrid=False, tickangle=45),
+                    yaxis=dict(showgrid=True, gridcolor='#334155', title='Count')
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+            # Status distribution
+            by_status = summary.get('by_status', {})
+            if by_status:
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.markdown("### Status Distribution")
+
+                    statuses = list(by_status.keys())
+                    status_counts = list(by_status.values())
+                    colors = ['#10B981' if s == 'success' else '#EF4444' if s == 'failed' else '#F59E0B' for s in statuses]
+
+                    fig = go.Figure(data=[go.Pie(
+                        labels=statuses,
+                        values=status_counts,
+                        marker_colors=colors,
+                        hole=0.4
+                    )])
+
+                    fig.update_layout(
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        font_color='#F1F5F9',
+                        height=300,
+                        margin=dict(l=0, r=0, t=20, b=0),
+                        showlegend=True
+                    )
+
+                    st.plotly_chart(fig, use_container_width=True)
+
+                with col2:
+                    st.markdown("### Category Distribution")
+
+                    by_category = summary.get('by_category', {})
+                    if by_category:
+                        categories = list(by_category.keys())
+                        cat_counts = list(by_category.values())
+
+                        fig = go.Figure(data=[go.Bar(
+                            y=categories,
+                            x=cat_counts,
+                            orientation='h',
+                            marker_color='#8B5CF6',
+                            text=cat_counts,
+                            textposition='outside'
+                        )])
+
+                        fig.update_layout(
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            font_color='#F1F5F9',
+                            height=300,
+                            margin=dict(l=0, r=0, t=20, b=0),
+                            xaxis=dict(showgrid=True, gridcolor='#334155'),
+                            yaxis=dict(showgrid=False)
+                        )
+
+                        st.plotly_chart(fig, use_container_width=True)
+
+        except Exception as e:
+            st.warning(f"Could not load performance data: {e}")
+            render_mock_performance()
+    else:
+        render_mock_performance()
+
+
+def render_mock_performance():
+    """Display mock performance data when real data is not available"""
+
+    # Execution trend with mock data
+    import random
 
     days = [(datetime.now() - timedelta(days=i)).strftime('%m/%d') for i in range(30, 0, -1)]
-    import random
-    executions = [random.randint(5000, 8000) for _ in range(30)]
+    executions = [random.randint(50, 200) for _ in range(30)]
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=days,
         y=executions,
         mode='lines+markers',
-        name='Daily Executions',
+        name='Daily Activities',
         line=dict(color='#6366F1', width=2),
         fill='tozeroy',
         fillcolor='rgba(99, 102, 241, 0.1)'
     ))
 
     fig.update_layout(
-        title="Daily Workflow Executions (Last 30 Days)",
+        title="Daily Activity Trend (Mock Data)",
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
         font_color='#F1F5F9',
         height=300,
         margin=dict(l=0, r=0, t=40, b=0),
         xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor='#334155', title='Executions')
+        yaxis=dict(showgrid=True, gridcolor='#334155', title='Activities')
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # Performance by workflow
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("### Success Rate by Workflow")
-
-        workflows = ['Inventory Sync', 'Recommendations', 'Order Processing', 'Fraud Detection', 'Sentiment']
-        success_rates = [99.8, 98.6, 99.9, 100, 96.2]
-
-        fig = go.Figure(data=[go.Bar(
-            y=workflows,
-            x=success_rates,
-            orientation='h',
-            marker_color='#10B981',
-            text=[f"{rate}%" for rate in success_rates],
-            textposition='outside'
-        )])
-
-        fig.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='#F1F5F9',
-            height=300,
-            margin=dict(l=0, r=0, t=20, b=0),
-            xaxis=dict(showgrid=True, gridcolor='#334155', range=[95, 100.5]),
-            yaxis=dict(showgrid=False)
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        st.markdown("### Average Execution Time")
-
-        durations = [135, 754, 83, 0.45, 312]  # in seconds
-
-        fig = go.Figure(data=[go.Bar(
-            y=workflows,
-            x=durations,
-            orientation='h',
-            marker_color='#6366F1',
-            text=[f"{d}s" if d >= 1 else f"{int(d*1000)}ms" for d in durations],
-            textposition='outside'
-        )])
-
-        fig.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='#F1F5F9',
-            height=300,
-            margin=dict(l=0, r=0, t=20, b=0),
-            xaxis=dict(showgrid=True, gridcolor='#334155', title='Seconds'),
-            yaxis=dict(showgrid=False)
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
+    st.info("Real activity data will appear here once you start using the AI Reporting features.")
 
 
 def render_workflow_builder():
@@ -455,13 +600,13 @@ def render_workflow_builder():
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        if st.button("💾 Save Workflow", use_container_width=True, type="primary"):
+        if st.button("Save Workflow", use_container_width=True, type="primary"):
             st.success("Workflow saved successfully!")
 
     with col2:
-        if st.button("▶️ Test Run", use_container_width=True):
+        if st.button("Test Run", use_container_width=True):
             st.info("Running test execution...")
 
     with col3:
-        if st.button("❌ Cancel", use_container_width=True):
+        if st.button("Cancel", use_container_width=True):
             st.warning("Cancelled")

@@ -5,6 +5,7 @@ Handles document embedding, storage, retrieval, and chat with knowledge base
 
 import os
 import re
+import json
 import logging
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -313,7 +314,12 @@ Be concise but thorough. Maintain a professional, helpful tone."""
             results_with_scores = []
             for doc in result.data:
                 if doc.get('embedding'):
-                    similarity = cosine_similarity(query_embedding, doc['embedding'])
+                    # Parse embedding if it's stored as JSON string
+                    doc_embedding = doc['embedding']
+                    if isinstance(doc_embedding, str):
+                        doc_embedding = json.loads(doc_embedding)
+
+                    similarity = cosine_similarity(query_embedding, doc_embedding)
                     results_with_scores.append({
                         'id': doc.get('id'),
                         'document_name': doc.get('document_name'),

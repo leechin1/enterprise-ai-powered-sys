@@ -80,6 +80,11 @@ with st.sidebar:
     if st.button("🧠 Knowledge", use_container_width=True, type="primary" if st.session_state.page == 'knowledge' else "secondary"):
         st.session_state.page = 'knowledge'
         st.rerun()
+    
+    # Activity
+    if st.button("📝 Activity", use_container_width=True, type="primary" if st.session_state.page == 'activity' else "secondary"):
+        st.session_state.page = 'activity'
+        st.rerun()
 
     st.markdown("---")
 

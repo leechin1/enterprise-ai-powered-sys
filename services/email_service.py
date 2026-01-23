@@ -1,0 +1,288 @@
+"""
+Email Service - EmailJS Integration for Enterprise System
+Handles email sending with placebo mode for development/testing
+All emails are sent to the configured recipient but store the intended recipient in subject
+"""
+
+import os
+import requests
+import logging
+from typing import List, Dict, Any, Optional
+from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Configuration
+EMAILJS_SERVICE_ID = os.getenv('EMAILJS_SERVICE_ID')
+EMAILJS_TEMPLATE_ID = os.getenv('EMAILJS_TEMPLATE_ID')
+EMAILJS_PUBLIC_KEY = os.getenv('EMAILJS_PUBLIC_KEY')
+EMAILJS_PRIVATE_KEY = os.getenv('EMAILJS_PRIVATE_KEY')
+
+# Placebo mode - all emails go to this address
+PLACEBO_EMAIL = os.getenv('PLACEBO_EMAIL')  # Your personal email
+PLACEBO_MODE = os.getenv('PLACEBO_MODE', 'true').lower() == 'true'
+
+# EmailJS API endpoint
+EMAILJS_API_URL = "https://api.emailjs.com/api/v1.0/email/send"
+
+logger = logging.getLogger(__name__)
+
+
+class EmailService:
+    """
+    Email service using EmailJS for sending emails.
+    In placebo mode, all emails are sent to a single recipient (your email)
+    with the original recipient stored in the subject line for tracking.
+    """
+
+    def __init__(self):
+        self.service_id = EMAILJS_SERVICE_ID
+        self.template_id = EMAILJS_TEMPLATE_ID
+        self.public_key = EMAILJS_PUBLIC_KEY
+        self.private_key = EMAILJS_PRIVATE_KEY
+        self.placebo_email = PLACEBO_EMAIL
+        self.placebo_mode = PLACEBO_MODE
+
+        # Validate configuration
+        self._validate_config()
+
+    def _validate_config(self):
+        """Validate that required configuration is present"""
+        missing = []
+        if not self.service_id:
+            missing.append('EMAILJS_SERVICE_ID')
+        if not self.template_id:
+            missing.append('EMAILJS_TEMPLATE_ID')
+        if not self.public_key:
+            missing.append('EMAILJS_PUBLIC_KEY')
+        if self.placebo_mode and not self.placebo_email:
+            missing.append('PLACEBO_EMAIL')
+
+        if missing:
+            logger.warning(f"Email service missing configuration: {', '.join(missing)}")
+
+    def is_configured(self) -> bool:
+        """Check if the email service is properly configured"""
+        required = [self.service_id, self.template_id, self.public_key]
+        if self.placebo_mode:
+            required.append(self.placebo_email)
+        return all(required)
+
+    def send_email(
+        self,
+        to_email: str,
+        to_name: str,
+        subject: str,
+        body: str,
+        email_type: str = "notification",
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Send an email using EmailJS.
+
+        In placebo mode:
+        - Email is sent to PLACEBO_EMAIL instead of to_email
+        - Original recipient is stored in subject: "[PLACEBO: original@email.com] Original Subject"
+
+        Args:
+            to_email: Intended recipient email
+            to_name: Recipient name
+            subject: Email subject
+            body: Email body content
+            email_type: Type of email (customer_notification, inventory_alert, etc.)
+            metadata: Optional additional metadata
+
+        Returns:
+            Result dict with success status and details
+        """
+        if not self.is_configured():
+            return {
+                "success": False,
+                "error": "Email service not configured. Please set EmailJS credentials in .env",
+                "sent": False
+            }
+
+        try:
+            # Prepare the actual recipient and subject based on mode
+            actual_to_email = self.placebo_email if self.placebo_mode else to_email
+            actual_subject = f"[PLACEBO: {to_email}] {subject}" if self.placebo_mode else subject
+
+            # Prepare the request payload for EmailJS
+            template_params = {
+                "to_email": actual_to_email,
+                "to_name": to_name if not self.placebo_mode else f"[Test] {to_name}",
+                "subject": actual_subject,
+                "message": body,
+                "email_type": email_type,
+                "original_recipient": to_email,
+                "sent_at": datetime.now().isoformat(),
+            }
+
+            # Add any additional metadata
+            if metadata:
+                template_params["metadata"] = str(metadata)
+
+            payload = {
+                "service_id": self.service_id,
+                "template_id": self.template_id,
+                "user_id": self.public_key,
+                "template_params": template_params
+            }
+
+            # Add private key if available (for server-side sending)
+            if self.private_key:
+                payload["accessToken"] = self.private_key
+
+            # Send the request
+            response = requests.post(
+                EMAILJS_API_URL,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=30
+            )
+
+            if response.status_code == 200:
+                logger.info(f"Email sent successfully to {actual_to_email} (original: {to_email})")
+                return {
+                    "success": True,
+                    "sent": True,
+                    "placebo_mode": self.placebo_mode,
+                    "actual_recipient": actual_to_email,
+                    "original_recipient": to_email,
+                    "subject": actual_subject,
+                    "timestamp": datetime.now().isoformat()
+                }
+            else:
+                error_msg = f"EmailJS returned status {response.status_code}: {response.text}"
+                logger.error(error_msg)
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "sent": False
+                }
+
+        except requests.exceptions.Timeout:
+            return {
+                "success": False,
+                "error": "Email service timeout",
+                "sent": False
+            }
+        except requests.exceptions.RequestException as e:
+            return {
+                "success": False,
+                "error": f"Request error: {str(e)}",
+                "sent": False
+            }
+        except Exception as e:
+            logger.error(f"Unexpected error sending email: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "sent": False
+            }
+
+    def send_bulk_emails(
+        self,
+        emails: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Send multiple emails.
+
+        Args:
+            emails: List of email dicts with keys: to_email, to_name, subject, body, email_type
+
+        Returns:
+            Result dict with overall success status and individual results
+        """
+        results = []
+        success_count = 0
+        failure_count = 0
+
+        for email in emails:
+            result = self.send_email(
+                to_email=email.get("to_email", ""),
+                to_name=email.get("to_name", "Customer"),
+                subject=email.get("subject", "Notification from Misty Jazz Records"),
+                body=email.get("body", ""),
+                email_type=email.get("email_type", "notification"),
+                metadata=email.get("metadata")
+            )
+
+            results.append({
+                "to_email": email.get("to_email"),
+                "result": result
+            })
+
+            if result["success"]:
+                success_count += 1
+            else:
+                failure_count += 1
+
+        return {
+            "success": failure_count == 0,
+            "total": len(emails),
+            "sent": success_count,
+            "failed": failure_count,
+            "results": results,
+            "placebo_mode": self.placebo_mode
+        }
+
+    def send_fix_emails(
+        self,
+        generated_emails: List[Dict[str, Any]],
+        recipients: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Send all emails associated with a fix proposal.
+
+        Args:
+            generated_emails: List of pre-generated emails from the fix
+            recipients: List of recipients with their details
+
+        Returns:
+            Result dict with sending status
+        """
+        # Create a mapping of emails to recipient details
+        recipient_map = {r.get("email", ""): r for r in recipients}
+
+        emails_to_send = []
+        for email in generated_emails:
+            recipient_emails = email.get("recipient_emails", [])
+            for recipient_email in recipient_emails:
+                recipient = recipient_map.get(recipient_email, {})
+                emails_to_send.append({
+                    "to_email": recipient_email,
+                    "to_name": recipient.get("name", "Valued Customer"),
+                    "subject": email.get("subject", "Notification from Misty Jazz Records"),
+                    "body": email.get("body", ""),
+                    "email_type": email.get("email_type", "notification"),
+                    "metadata": {
+                        "role": recipient.get("role", "customer"),
+                        "reason": recipient.get("reason", "")
+                    }
+                })
+
+        return self.send_bulk_emails(emails_to_send)
+
+    def get_status(self) -> Dict[str, Any]:
+        """Get the current status and configuration of the email service"""
+        return {
+            "configured": self.is_configured(),
+            "placebo_mode": self.placebo_mode,
+            "placebo_email": self.placebo_email if self.placebo_mode else None,
+            "service_id": self.service_id[:4] + "..." if self.service_id else None,
+            "template_id": self.template_id[:4] + "..." if self.template_id else None,
+        }
+
+
+# Singleton instance
+_email_service = None
+
+
+def get_email_service() -> EmailService:
+    """Get the singleton email service instance"""
+    global _email_service
+    if _email_service is None:
+        _email_service = EmailService()
+    return _email_service
