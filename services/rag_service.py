@@ -18,7 +18,7 @@ from langfuse import observe
 load_dotenv()
 
 # Configuration
-MODEL = os.getenv('VERTEX_MODEL', 'gemini-2.0-flash')
+MODEL = os.getenv('VERTEX_MODEL')
 PROJECT_ID = os.getenv('GCP_PROJECT_ID')
 LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
 EMBEDDING_MODEL = "text-embedding-004"

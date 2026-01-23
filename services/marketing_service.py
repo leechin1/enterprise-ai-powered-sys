@@ -24,7 +24,7 @@ load_dotenv()
 logging.getLogger("opentelemetry.sdk._shared_internal").setLevel(logging.CRITICAL)
 
 # Vertex AI Configuration
-MODEL = os.getenv('VERTEX_MODEL', 'gemini-2.0-flash')
+MODEL = os.getenv('VERTEX_MODEL')
 PROJECT_ID = os.getenv('GCP_PROJECT_ID')
 LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
 class MarketingService:

@@ -49,7 +49,7 @@ from services.tools.business_generation_tools import (
 
 load_dotenv()
 
-MODEL = os.getenv('VERTEX_MODEL', 'gemini-2.0-flash')
+MODEL = os.getenv('VERTEX_MODEL')
 PROJECT_ID = os.getenv('GCP_PROJECT_ID')
 LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
 
