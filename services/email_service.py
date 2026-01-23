@@ -23,7 +23,7 @@ EMAILJS_PRIVATE_KEY = os.getenv('EMAILJS_PRIVATE_KEY')
 PLACEBO_EMAIL = os.getenv('PLACEBO_EMAIL')  # Your personal email
 PLACEBO_MODE = os.getenv('PLACEBO_MODE', 'true').lower() == 'true'
 
-# EmailJS API endpoint
+# EmailJS API endpoint - use v1.1 for server-side with private key
 EMAILJS_API_URL = "https://api.emailjs.com/api/v1.0/email/send"
 
 logger = logging.getLogger(__name__)
@@ -109,14 +109,14 @@ class EmailService:
             actual_subject = f"[PLACEBO: {to_email}] {subject}" if self.placebo_mode else subject
 
             # Prepare the request payload for EmailJS
+            # Template variables must match your EmailJS template:
+            # {{subject}}, {{name}}, {{time}}, {{message}}, {{email}}
             template_params = {
-                "to_email": actual_to_email,
-                "to_name": to_name if not self.placebo_mode else f"[Test] {to_name}",
                 "subject": actual_subject,
+                "name": to_name if not self.placebo_mode else f"[Test] {to_name}",
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "message": body,
-                "email_type": email_type,
-                "original_recipient": to_email,
-                "sent_at": datetime.now().isoformat(),
+                "email": to_email,  # Original email for reply-to
             }
 
             # Add any additional metadata
@@ -127,18 +127,21 @@ class EmailService:
                 "service_id": self.service_id,
                 "template_id": self.template_id,
                 "user_id": self.public_key,
-                "template_params": template_params
+                "template_params": template_params,
+                "accessToken": self.private_key  # Required for server-side calls
             }
 
-            # Add private key if available (for server-side sending)
-            if self.private_key:
-                payload["accessToken"] = self.private_key
+            # Headers for server-side API call
+            headers = {
+                "Content-Type": "application/json",
+                "origin": "http://localhost"  # Required for CORS
+            }
 
             # Send the request
             response = requests.post(
                 EMAILJS_API_URL,
                 json=payload,
-                headers={"Content-Type": "application/json"},
+                headers=headers,
                 timeout=30
             )
 

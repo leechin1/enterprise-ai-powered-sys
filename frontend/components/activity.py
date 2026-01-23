@@ -1,5 +1,5 @@
 """
-Activity/Workflow Automation component for Misty AI Enterprise System
+Activity Log component for Misty AI Enterprise System
 Integrates with the activity log service for real activity tracking
 """
 import streamlit as st
@@ -22,30 +22,30 @@ except Exception as e:
 
 
 def render_activity():
-    """Render the activity and workflow automation interface"""
+    """Render the activity log interface"""
 
-    st.title("Activity & Workflow Automation")
-    st.caption("Monitor and manage automated business processes and AI agent activities")
+    st.title("Activity Log")
+    st.caption("Track all AI agent activities, fix approvals, and email communications")
 
     # Quick actions
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("▶️ New Workflow", use_container_width=True):
-            st.toast("Opening workflow builder...")
-
-    with col2:
-        if st.button("⏸️ Pause All", use_container_width=True):
-            st.toast("Pausing all active workflows...")
-
-    with col3:
-        if st.button("📊 View Logs", use_container_width=True):
-            st.session_state['show_activity_logs'] = True
-            st.rerun()
-
-    with col4:
         if st.button("🔄 Refresh", use_container_width=True):
             st.rerun()
+
+    with col2:
+        if st.button("🗑️ Clear Old Logs", use_container_width=True):
+            if ACTIVITY_LOG_AVAILABLE:
+                try:
+                    activity_service = get_activity_log_service()
+                    result = activity_service.clear_old_logs(days_to_keep=30)
+                    if result.get('success'):
+                        st.success(f"Cleared {result.get('deleted_count', 0)} old log entries")
+                    else:
+                        st.error(f"Failed to clear logs: {result.get('error')}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
     st.markdown("---")
 
@@ -103,24 +103,16 @@ def render_activity():
     st.markdown("---")
 
     # Tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2 = st.tabs([
         "⚡ Activity Log",
-        "🔄 Active Workflows",
-        "📈 Performance",
-        "⚙️ Workflow Builder"
+        "📈 Performance"
     ])
 
     with tab1:
         render_activity_log(recent_activities if ACTIVITY_LOG_AVAILABLE else None)
 
     with tab2:
-        render_active_workflows()
-
-    with tab3:
-        render_workflow_performance()
-
-    with tab4:
-        render_workflow_builder()
+        render_performance()
 
 
 def render_activity_log(activities=None):
@@ -309,106 +301,10 @@ def get_time_ago(dt: datetime) -> str:
         return dt.strftime('%b %d')
 
 
-def render_active_workflows():
-    """Display currently active workflows"""
+def render_performance():
+    """Display activity performance metrics"""
 
-    st.subheader("Active Workflow Configurations")
-
-    workflows = [
-        {
-            'name': 'Inventory Sync',
-            'description': 'Automatically sync inventory across all channels',
-            'trigger': 'Every 15 minutes',
-            'status': 'Active',
-            'executions': 2847,
-            'success_rate': '99.8%',
-            'avg_duration': '2m 15s',
-            'enabled': True
-        },
-        {
-            'name': 'Customer Recommendations',
-            'description': 'Generate personalized product recommendations',
-            'trigger': 'Daily at 2:00 AM',
-            'status': 'Active',
-            'executions': 145,
-            'success_rate': '98.6%',
-            'avg_duration': '12m 34s',
-            'enabled': True
-        },
-        {
-            'name': 'Order Processing',
-            'description': 'Automated order fulfillment and shipping',
-            'trigger': 'On new order',
-            'status': 'Active',
-            'executions': 1245,
-            'success_rate': '99.9%',
-            'avg_duration': '1m 23s',
-            'enabled': True
-        },
-        {
-            'name': 'Fraud Detection',
-            'description': 'Real-time transaction fraud analysis',
-            'trigger': 'On payment',
-            'status': 'Active',
-            'executions': 1389,
-            'success_rate': '100%',
-            'avg_duration': '450ms',
-            'enabled': True
-        },
-        {
-            'name': 'Customer Sentiment',
-            'description': 'Analyze customer feedback and reviews',
-            'trigger': 'Every 6 hours',
-            'status': 'Error',
-            'executions': 67,
-            'success_rate': '96.2%',
-            'avg_duration': '5m 12s',
-            'enabled': True
-        },
-        {
-            'name': 'Supplier Price Monitor',
-            'description': 'Track supplier price changes',
-            'trigger': 'Daily at 8:00 AM',
-            'status': 'Paused',
-            'executions': 89,
-            'success_rate': '99.1%',
-            'avg_duration': '3m 45s',
-            'enabled': False
-        },
-    ]
-
-    for workflow in workflows:
-        with st.expander(f"{'✅' if workflow['enabled'] else '⏸️'} {workflow['name']}", expanded=False):
-            col1, col2 = st.columns([3, 1])
-
-            with col1:
-                st.write(f"**Description:** {workflow['description']}")
-                st.write(f"**Trigger:** {workflow['trigger']}")
-                st.write(f"**Status:** {workflow['status']}")
-
-                col_metric1, col_metric2, col_metric3 = st.columns(3)
-                with col_metric1:
-                    st.metric("Executions", workflow['executions'])
-                with col_metric2:
-                    st.metric("Success Rate", workflow['success_rate'])
-                with col_metric3:
-                    st.metric("Avg Duration", workflow['avg_duration'])
-
-            with col2:
-                st.write("")  # Spacer
-                if workflow['enabled']:
-                    st.button("⏸️ Pause", key=f"pause_{workflow['name']}", use_container_width=True)
-                else:
-                    st.button("▶️ Resume", key=f"resume_{workflow['name']}", use_container_width=True)
-
-                st.button("⚙️ Configure", key=f"config_{workflow['name']}", use_container_width=True)
-                st.button("📊 View Logs", key=f"logs_{workflow['name']}", use_container_width=True)
-
-
-def render_workflow_performance():
-    """Display workflow performance metrics"""
-
-    st.subheader("Workflow Performance Analytics")
+    st.subheader("Activity Performance Analytics")
 
     # Get real data if available
     if ACTIVITY_LOG_AVAILABLE:
@@ -504,109 +400,11 @@ def render_workflow_performance():
 
                         st.plotly_chart(fig, use_container_width=True)
 
+            if not by_type and not by_status:
+                st.info("No activity data available yet. Start using the AI Reporting features to see performance metrics.")
+
         except Exception as e:
             st.warning(f"Could not load performance data: {e}")
-            render_mock_performance()
+            st.info("Real activity data will appear here once you start using the AI Reporting features.")
     else:
-        render_mock_performance()
-
-
-def render_mock_performance():
-    """Display mock performance data when real data is not available"""
-
-    # Execution trend with mock data
-    import random
-
-    days = [(datetime.now() - timedelta(days=i)).strftime('%m/%d') for i in range(30, 0, -1)]
-    executions = [random.randint(50, 200) for _ in range(30)]
-
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=days,
-        y=executions,
-        mode='lines+markers',
-        name='Daily Activities',
-        line=dict(color='#6366F1', width=2),
-        fill='tozeroy',
-        fillcolor='rgba(99, 102, 241, 0.1)'
-    ))
-
-    fig.update_layout(
-        title="Daily Activity Trend (Mock Data)",
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font_color='#F1F5F9',
-        height=300,
-        margin=dict(l=0, r=0, t=40, b=0),
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor='#334155', title='Activities')
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    st.info("Real activity data will appear here once you start using the AI Reporting features.")
-
-
-def render_workflow_builder():
-    """Simple workflow builder interface"""
-
-    st.subheader("Workflow Builder")
-    st.caption("Create and configure automated workflows")
-
-    workflow_name = st.text_input("Workflow Name", placeholder="e.g., Customer Birthday Email Campaign")
-
-    workflow_description = st.text_area("Description", placeholder="Describe what this workflow does...")
-
-    st.markdown("### Trigger Configuration")
-
-    trigger_type = st.selectbox(
-        "Trigger Type",
-        ["Schedule", "Event", "Manual", "API Call"]
-    )
-
-    if trigger_type == "Schedule":
-        col1, col2 = st.columns(2)
-        with col1:
-            schedule_type = st.selectbox("Schedule", ["Daily", "Weekly", "Monthly", "Custom Cron"])
-        with col2:
-            schedule_time = st.time_input("Time")
-
-    elif trigger_type == "Event":
-        event_type = st.selectbox(
-            "Event",
-            ["New Order", "Customer Signup", "Low Stock Alert", "Payment Received", "Review Posted"]
-        )
-
-    st.markdown("### Actions")
-
-    num_actions = st.number_input("Number of Actions", min_value=1, max_value=10, value=1)
-
-    for i in range(int(num_actions)):
-        with st.expander(f"Action {i+1}", expanded=True):
-            action_type = st.selectbox(
-                "Action Type",
-                ["Send Email", "Update Database", "Call API", "Run AI Model", "Send Notification", "Create Task"],
-                key=f"action_type_{i}"
-            )
-
-            action_config = st.text_area(
-                "Configuration (JSON)",
-                placeholder='{"to": "customer@email.com", "template": "birthday_offer"}',
-                key=f"action_config_{i}"
-            )
-
-    st.markdown("---")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        if st.button("Save Workflow", use_container_width=True, type="primary"):
-            st.success("Workflow saved successfully!")
-
-    with col2:
-        if st.button("Test Run", use_container_width=True):
-            st.info("Running test execution...")
-
-    with col3:
-        if st.button("Cancel", use_container_width=True):
-            st.warning("Cancelled")
+        st.info("Activity log service not available. Please check your Supabase configuration.")

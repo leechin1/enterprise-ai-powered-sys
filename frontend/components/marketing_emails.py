@@ -14,6 +14,37 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from services.marketing_service import MarketingService
 from services.ai_review_response_agent import AIReviewResponseAgent
 
+# Import email and activity log services
+try:
+    from services.email_service import get_email_service
+    EMAIL_SERVICE_AVAILABLE = True
+except Exception as e:
+    EMAIL_SERVICE_AVAILABLE = False
+    print(f"Email service not available: {e}")
+
+try:
+    from services.activity_log_service import get_activity_log_service
+    ACTIVITY_LOG_AVAILABLE = True
+except Exception as e:
+    ACTIVITY_LOG_AVAILABLE = False
+    print(f"Activity log service not available: {e}")
+
+
+def log_activity(action_type: str, description: str, category: str = "email", **kwargs):
+    """Helper function to log activities"""
+    if ACTIVITY_LOG_AVAILABLE:
+        try:
+            activity_service = get_activity_log_service()
+            activity_service.log_activity(
+                action_type=action_type,
+                description=description,
+                category=category,
+                metadata=kwargs.get('metadata'),
+                status=kwargs.get('status', 'success')
+            )
+        except Exception as e:
+            print(f"Failed to log activity: {e}")
+
 
 def render_marketing_emails():
     """Render the Marketing Emails page with customer segmentation and email generation"""
@@ -231,18 +262,20 @@ def render_marketing_emails_tab():
     if st.session_state.get('generated_email'):
         st.success("✅ Email generated successfully!")
 
-        st.markdown("### Generated Email Preview")
+        st.markdown("### ✏️ Edit Email Before Sending")
+        st.caption("You can edit the email content below before sending. Changes are saved automatically.")
 
-        # Display in a nice card
-        with st.container():
-            st.markdown(
-                f"""
-                <div style="background-color: #1E293B; padding: 2rem; border-radius: 0.5rem; border-left: 4px solid #6366F1;">
-                    <pre style="white-space: pre-wrap; font-family: inherit; color: #F1F5F9;">{st.session_state.generated_email}</pre>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+        # Editable text area for the email
+        edited_email = st.text_area(
+            "Email Content",
+            value=st.session_state.generated_email,
+            height=300,
+            key="email_editor",
+            help="Edit the subject, body, and call-to-action as needed"
+        )
+
+        # Update session state with edited content
+        st.session_state.generated_email = edited_email
 
         st.markdown("---")
 
@@ -264,21 +297,93 @@ def render_marketing_emails_tab():
 
         with col3:
             if st.button("📧 Send Email", use_container_width=True, type="primary"):
-                # Placebo send button
-                with st.spinner("Sending emails..."):
-                    import time
-                    time.sleep(2)  # Simulate sending
-                    st.success(f"✅ Email sent to {len(st.session_state.get('selected_customers', []))} customers!")
-                    st.balloons()
+                # Parse the generated email to extract subject and body
+                generated_email = st.session_state.get('generated_email', '')
+                customers_df = st.session_state.get('selected_customers')
 
-                    # Show some fake stats
-                    st.info(f"""
-                    📊 **Campaign Stats (Simulated)**
-                    - Emails Sent: {len(st.session_state.get('selected_customers', []))}
-                    - Estimated Open Rate: 24-32%
-                    - Estimated Click Rate: 8-12%
-                    - Campaign ID: #{datetime.now().strftime('%Y%m%d%H%M%S')}
-                    """)
+                # Extract subject and body from generated email
+                import re
+                subject_match = re.search(r'SUBJECT:\s*(.+?)(?:\n|$)', generated_email, re.IGNORECASE)
+                body_match = re.search(r'BODY:\s*(.+?)(?=CALL-TO-ACTION:|$)', generated_email, re.IGNORECASE | re.DOTALL)
+                cta_match = re.search(r'CALL-TO-ACTION:\s*(.+?)$', generated_email, re.IGNORECASE | re.DOTALL)
+
+                if not subject_match or not body_match:
+                    st.error("Could not parse email content. Please regenerate the email.")
+                else:
+                    subject = subject_match.group(1).strip()
+                    body = body_match.group(1).strip()
+                    if cta_match:
+                        body += f"\n\n{cta_match.group(1).strip()}"
+
+                    # Send preview email using EmailJS (placebo mode)
+                    if EMAIL_SERVICE_AVAILABLE:
+                        email_service = get_email_service()
+
+                        with st.spinner("📧 Sending preview email..."):
+                            # Send a single preview email representing the campaign
+                            # In placebo mode, this goes to your test email
+                            first_customer = customers_df.iloc[0] if not customers_df.empty else None
+                            recipient_email = first_customer['email'] if first_customer is not None else "campaign@mistyjazzrecords.com"
+                            recipient_name = first_customer['name'] if first_customer is not None else "Valued Customer"
+
+                            result = email_service.send_email(
+                                to_email=recipient_email,
+                                to_name=recipient_name,
+                                subject=f"[CAMPAIGN PREVIEW] {subject}",
+                                body=f"This is a preview of the marketing campaign that would be sent to {len(customers_df)} customers.\n\n---\n\n{body}",
+                                email_type="marketing_campaign",
+                                metadata={
+                                    "segment_type": st.session_state.get('segment_type'),
+                                    "total_recipients": len(customers_df),
+                                    "campaign_id": datetime.now().strftime('%Y%m%d%H%M%S')
+                                }
+                            )
+
+                            if result.get('success'):
+                                # Log the activity
+                                log_activity(
+                                    action_type="email_sent",
+                                    description=f"Marketing campaign preview sent ({len(customers_df)} recipients)",
+                                    category="email",
+                                    metadata={
+                                        "segment_type": st.session_state.get('segment_type'),
+                                        "total_recipients": len(customers_df),
+                                        "subject": subject,
+                                        "placebo_mode": result.get('placebo_mode', True)
+                                    }
+                                )
+
+                                st.success(f"✅ Campaign preview email sent!")
+                                st.balloons()
+
+                                # Show email status
+                                status = email_service.get_status()
+                                if status.get('placebo_mode'):
+                                    st.info(f"""
+                                    📬 **Placebo Mode Active**
+                                    - Preview sent to: {status.get('placebo_email')}
+                                    - Original recipient would be: {recipient_email}
+                                    - Campaign would reach: {len(customers_df)} customers
+                                    - Campaign ID: #{datetime.now().strftime('%Y%m%d%H%M%S')}
+                                    """)
+                                else:
+                                    st.info(f"""
+                                    📊 **Campaign Stats**
+                                    - Emails Sent: {len(customers_df)}
+                                    - Campaign ID: #{datetime.now().strftime('%Y%m%d%H%M%S')}
+                                    """)
+                            else:
+                                # Log failure
+                                log_activity(
+                                    action_type="email_failed",
+                                    description=f"Marketing campaign failed: {result.get('error', 'Unknown error')}",
+                                    category="email",
+                                    metadata={"error": result.get('error')},
+                                    status="failed"
+                                )
+                                st.error(f"❌ Failed to send email: {result.get('error', 'Unknown error')}")
+                    else:
+                        st.warning("Email service not available. Please check your EmailJS configuration in .env")
 
 
 def render_review_responses_tab():
@@ -478,27 +583,102 @@ def render_batch_results_popup(category_key, category_info):
             for idx, result in enumerate(batch_results):
                 result['response_text'] = edited_df.iloc[idx]['Proposed Response']
 
-            # Placebo send action
-            with st.spinner("Sending responses..."):
+            # Send review responses via EmailJS (placebo mode)
+            if EMAIL_SERVICE_AVAILABLE:
+                email_service = get_email_service()
+                emails_sent = 0
+                emails_failed = 0
+
+                with st.spinner("📧 Sending review responses..."):
+                    for result in batch_results:
+                        if result['status'] == 'success':
+                            # Create email for this review response
+                            # In a real system, this would go to the customer
+                            # In placebo mode, it goes to your test email
+                            customer_email = f"{result['first_name'].lower()}.{result['last_name'].lower()}@customer.example.com"
+
+                            email_result = email_service.send_email(
+                                to_email=customer_email,
+                                to_name=f"{result['first_name']} {result['last_name']}",
+                                subject=f"Thank you for your review - Misty Jazz Records",
+                                body=result['response_text'],
+                                email_type="review_response",
+                                metadata={
+                                    "review_id": result['review_id'],
+                                    "star_rating": result['star_rating'],
+                                    "sentiment_score": result['sentiment_score'],
+                                    "category": category_key
+                                }
+                            )
+
+                            if email_result.get('success'):
+                                emails_sent += 1
+                                log_activity(
+                                    action_type="email_sent",
+                                    description=f"Review response sent to {result['first_name']} {result['last_name']}",
+                                    category="email",
+                                    metadata={
+                                        "review_id": result['review_id'],
+                                        "to_email": customer_email,
+                                        "placebo_mode": email_result.get('placebo_mode', True)
+                                    }
+                                )
+                            else:
+                                emails_failed += 1
+                                log_activity(
+                                    action_type="email_failed",
+                                    description=f"Review response failed to {result['first_name']} {result['last_name']}: {email_result.get('error')}",
+                                    category="email",
+                                    metadata={
+                                        "review_id": result['review_id'],
+                                        "error": email_result.get('error')
+                                    },
+                                    status="failed"
+                                )
+
+                if emails_sent > 0:
+                    st.success(f"✅ Sent {emails_sent} review response(s)!")
+                    st.balloons()
+
+                if emails_failed > 0:
+                    st.warning(f"⚠️ {emails_failed} email(s) failed to send")
+
+                # Show placebo mode indicator
+                status = email_service.get_status()
+                if status.get('placebo_mode'):
+                    st.info(f"""
+                    📬 **Placebo Mode Active**
+                    - All {emails_sent} emails sent to: {status.get('placebo_email')}
+                    - Category: {category_info['title']}
+                    - Each email shows the intended recipient in the subject line
+                    """)
+                else:
+                    st.info(f"""
+                    📊 **Send Summary**
+                    - Responses Sent: {emails_sent}
+                    - Failed: {emails_failed}
+                    - Category: {category_info['title']}
+                    - Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+                    """)
+            else:
+                # Fallback if email service not available
+                st.warning("Email service not available. Simulating send...")
                 import time
                 time.sleep(2)
-
-            st.success(f"✅ Sent {success_count} responses successfully!")
-            st.balloons()
+                st.success(f"✅ Simulated sending {success_count} responses!")
+                st.info(f"""
+                📊 **Send Summary (Simulated)**
+                - Responses Sent: {success_count}
+                - Failed: {failed_count}
+                - Category: {category_info['title']}
+                - Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+                """)
 
             # Clear the popup state
             st.session_state[f'show_popup_{category_key}'] = False
             st.session_state[f'batch_results_{category_key}'] = []
 
-            # Show success message
-            st.info(f"""
-            📊 **Send Summary**
-            - Responses Sent: {success_count}
-            - Failed: {failed_count}
-            - Category: {category_info['title']}
-            - Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-            """)
-
+            import time
             time.sleep(2)
             st.rerun()
 

@@ -383,14 +383,17 @@ class MarketingService:
         if segment_data.empty:
             raise ValueError("No customer data provided")
 
-        # Build segment description
-        segment_descriptions = {
-            'low_spend': f"low-spending customers (average spent: ${segment_data['total_spent'].mean():.2f}, {len(segment_data)} customers)",
-            'best': f"VIP customers (average spent: ${segment_data['total_spent'].mean():.2f}, {len(segment_data)} customers)",
-            'genre': f"customers who love {segment_data.iloc[0]['genre'] if 'genre' in segment_data.columns else 'jazz'} music ({len(segment_data)} customers)"
-        }
-
-        segment_desc = segment_descriptions.get(segment_type, f"valued customers ({len(segment_data)} customers)")
+        # Build segment description based on available columns
+        if segment_type == 'low_spend' and 'total_spent' in segment_data.columns:
+            segment_desc = f"low-spending customers (average spent: ${segment_data['total_spent'].mean():.2f}, {len(segment_data)} customers)"
+        elif segment_type == 'best' and 'total_spent' in segment_data.columns:
+            segment_desc = f"VIP customers (average spent: ${segment_data['total_spent'].mean():.2f}, {len(segment_data)} customers)"
+        elif segment_type == 'genre':
+            genre_name = segment_data.iloc[0]['genre'] if 'genre' in segment_data.columns else 'jazz'
+            avg_spent = segment_data['genre_spent'].mean() if 'genre_spent' in segment_data.columns else 0
+            segment_desc = f"customers who love {genre_name} music (average spent on genre: ${avg_spent:.2f}, {len(segment_data)} customers)"
+        else:
+            segment_desc = f"valued customers ({len(segment_data)} customers)"
 
         # Build the prompt with strict formatting requirements
         email_prompt = f"""You are writing a marketing email for Misty Jazz Records, a premium vinyl record store.
