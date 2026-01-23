@@ -97,6 +97,16 @@ class RecommendationsOutput(BaseModel):
 
 # ============ FIXES SCHEMAS ============
 
+class Recipient(BaseModel):
+    """A recipient for fix-related communications"""
+    name: str = Field(..., description="Full name of the recipient", min_length=2, max_length=100)
+    email: str = Field(..., description="Email address of the recipient", min_length=5, max_length=100)
+    role: Literal["customer", "supplier", "staff", "manager"] = Field(
+        ..., description="Role of the recipient"
+    )
+    reason: str = Field(..., description="Why this person is receiving the communication", min_length=10, max_length=200)
+
+
 class BusinessFix(BaseModel):
     """A specific fix for a business issue"""
     issue_id: str = Field(..., description="Issue title or ID being addressed", min_length=5, max_length=100)
@@ -125,6 +135,10 @@ class BusinessFix(BaseModel):
     )
     priority: Literal["immediate", "urgent", "scheduled"] = Field(
         ..., description="When to execute this fix"
+    )
+    recipients: List[Recipient] = Field(
+        default_factory=list,
+        description="List of people who will receive emails/communications for this fix"
     )
 
 

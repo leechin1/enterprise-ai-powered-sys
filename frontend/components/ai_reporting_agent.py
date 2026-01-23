@@ -3,6 +3,7 @@ AI Business Intelligence Reporting component (Refactored)
 Uses the new LangChain-based AI Business Consultant Agent
 """
 import streamlit as st
+import pandas as pd
 from datetime import datetime
 import sys
 from pathlib import Path
@@ -515,8 +516,9 @@ def display_issues_results(result, issues_agent=None):
             # Generate fix if button was clicked
             if st.session_state.get(f'generating_fix_{i}') and issues_agent:
                 with st.spinner(f"🧠 AI generating fix for Issue #{i}..."):
-                    # Generate fix for this specific issue
-                    fix_result = issues_agent.propose_fixes([issue])
+                    # Generate fix for this specific issue (pass query results for recipient extraction)
+                    query_results = st.session_state.get('query_results_cache', [])
+                    fix_result = issues_agent.propose_fixes([issue], query_results)
                     st.session_state[f'fix_result_{i}'] = fix_result
                     st.session_state[f'generating_fix_{i}'] = False
                     st.session_state[f'show_fix_modal_{i}'] = True
@@ -570,6 +572,34 @@ def display_fix_modal(issue_num: int, issue: dict, fix_result: dict):
             st.markdown("**Action Steps:**")
             for step_idx, step in enumerate(action_steps, 1):
                 st.markdown(f"{step_idx}. {step}")
+
+        # Recipients table (if any)
+        recipients = fix.get('recipients', [])
+        if recipients:
+            st.markdown("---")
+            st.markdown("### 👥 Recipients")
+            st.caption(f"{len(recipients)} recipient(s) will receive communications for this fix")
+
+            # Build recipients table data
+            recipients_data = []
+            for r in recipients:
+                role_emoji = {
+                    "customer": "👤",
+                    "supplier": "🏭",
+                    "staff": "👨‍💼",
+                    "manager": "👔"
+                }.get(r.get('role', ''), "👤")
+
+                recipients_data.append({
+                    "Name": r.get('name', 'N/A'),
+                    "Email": r.get('email', 'N/A'),
+                    "Role": f"{role_emoji} {r.get('role', 'N/A').title()}",
+                    "Reason": r.get('reason', 'N/A')
+                })
+
+            # Display as dataframe table
+            df = pd.DataFrame(recipients_data)
+            st.dataframe(df, use_container_width=True, hide_index=True)
 
         st.markdown("---")
 

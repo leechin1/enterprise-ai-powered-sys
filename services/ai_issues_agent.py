@@ -426,12 +426,13 @@ class AIIssuesAgent:
             }
 
     @observe()
-    def propose_fixes(self, issues: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def propose_fixes(self, issues: List[Dict[str, Any]], query_results: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         STAGE 2: Propose concrete fixes for identified issues using available tools
 
         Args:
             issues: List of identified issues from Stage 1
+            query_results: Original SQL query results (for extracting recipient info)
 
         Returns:
             Dictionary with proposed fixes and metadata
@@ -446,9 +447,19 @@ class AIIssuesAgent:
                 for i, issue in enumerate(issues[:7])  # Limit to 7 issues
             ])
 
+            # Format query results for recipient extraction
+            query_data_summary = ""
+            if query_results:
+                query_data_summary = "\n\n**QUERY RESULTS DATA (use this to extract recipient information):**\n\n"
+                query_data_summary += "\n\n".join([
+                    f"Query {res['query_id']}: {res['purpose']}\n"
+                    f"Data ({res['row_count']} rows): {json.dumps(res['data'][:20], indent=2) if res['success'] else 'Query failed'}"
+                    for res in query_results
+                ])
+
             # Invoke Stage 2 agent
             result = self.fixes_agent.invoke({
-                "messages": [("user", f"Based on these identified business issues, propose concrete fixes using the available tools:\n\n{issues_summary}\n\nProvide actionable solutions that a non-technical user can understand and execute.")]
+                "messages": [("user", f"Based on these identified business issues, propose concrete fixes using the available tools:\n\n{issues_summary}\n{query_data_summary}\n\nProvide actionable solutions that a non-technical user can understand and execute. Include recipients from the query data for any fixes that involve sending emails.")]
             })
 
             # Extract response
@@ -477,11 +488,12 @@ class AIIssuesAgent:
                         {
                             "issue_id": issue['title'],
                             "fix_title": f"Address {issue['title']}",
-                            "fix_description": "Manual intervention required",
+                            "fix_description": "Manual intervention required. Please review the issue details and take appropriate action based on the severity and category.",
                             "tools_to_use": [],
                             "action_steps": ["Review the issue", "Take appropriate action"],
                             "expected_outcome": "Issue resolution",
-                            "priority": "urgent"
+                            "priority": "urgent",
+                            "recipients": []
                         }
                         for issue in issues[:7]
                     ]
@@ -505,15 +517,18 @@ class AIIssuesAgent:
             }
 
     @observe()
-    def analyze_and_propose_fixes(self) -> Dict[str, Any]:
+    def analyze_and_propose_fixes(self, query_results: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Complete two-stage analysis: Identify issues → Propose fixes
+
+        Args:
+            query_results: Optional query results for recipient extraction in Stage 2
 
         Returns:
             Dictionary with both issues and fixes
         """
         # Stage 1: Identify issues
-        issues_result = self.identify_business_issues()
+        issues_result = self.identify_business_issues(query_results)
 
         if not issues_result["success"]:
             return issues_result
@@ -521,8 +536,8 @@ class AIIssuesAgent:
         # Extract issues
         issues = issues_result["data"]["issues"]
 
-        # Stage 2: Propose fixes
-        fixes_result = self.propose_fixes(issues)
+        # Stage 2: Propose fixes (pass query results for recipient extraction)
+        fixes_result = self.propose_fixes(issues, query_results)
 
         # Combine results
         return {
