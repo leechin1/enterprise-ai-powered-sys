@@ -116,7 +116,7 @@ class __login__:
                         self.cookies['__streamlit_login_signup_ui_username__'] = username
                         self.cookies.save()
                         del_login.empty()
-                        st.experimental_rerun()
+                        st.session_state["rerun_trigger"] = not st.session_state.get("rerun_trigger", False)
 
 
     def animation(self) -> None:
@@ -126,51 +126,39 @@ class __login__:
         lottie_json = load_lottie(self.lottie_url)
         st_lottie(lottie_json, width = self.width, height = self.height)
 
-
     def sign_up_widget(self) -> None:
         """
         Creates the sign-up widget and stores the user info in a secure way in the _secret_auth_.json file.
         """
         with st.form("Sign Up Form"):
-            name_sign_up = st.text_input("Name *", placeholder = 'Please enter your name')
-            valid_name_check = check_valid_username(name_sign_up)
+            name_sign_up = st.text_input("Name *", placeholder='Please enter your name')
+            username_error = check_valid_username(name_sign_up)
 
-            email_sign_up = st.text_input("Email *", placeholder = 'Please enter your email')
-            valid_email_check = check_valid_email(email_sign_up)
+            email_sign_up = st.text_input("Email *", placeholder='Please enter your email')
+            email_error = check_valid_email(email_sign_up)
             unique_email_check = check_unique_email(email_sign_up)
             
-            username_sign_up = st.text_input("Username *", placeholder = 'Enter a unique username')
+            username_sign_up = st.text_input("Username *", placeholder='Enter a unique username')
             unique_username_check = check_unique_usr(username_sign_up)
 
-            password_sign_up = st.text_input("Password *", placeholder = 'Create a strong password', type = 'password')
+            password_sign_up = st.text_input("Password *", placeholder='Create a strong password', type='password')
 
             st.markdown("###")
-            sign_up_submit_button = st.form_submit_button(label = 'Register')
+            sign_up_submit_button = st.form_submit_button(label='Register')
 
             if sign_up_submit_button:
-                if valid_name_check == False:
-                    st.error("Please enter a valid name!")
-
-                elif valid_email_check == False:
-                    st.error("Please enter a valid Email!")
-                
-                elif unique_email_check == False:
+                if username_error:
+                    st.error(username_error)
+                elif email_error:
+                    st.error(email_error)
+                elif unique_email_check is False:
                     st.error("Email already exists!")
-                
-                elif unique_username_check == False:
-                    st.error(f'Sorry, username {username_sign_up} already exists!')
-                
-                elif unique_username_check == None:
-                    st.error('Please enter a non - empty Username!')
-
-                if valid_name_check == True:
-                    if valid_email_check == True:
-                        if unique_email_check == True:
-                            if unique_username_check == True:
-                                register_new_usr(name_sign_up, email_sign_up, username_sign_up, password_sign_up)
-                                st.success("Registration Successful!")
-
-
+                elif unique_username_check is False:
+                    st.error(f"Sorry, username '{username_sign_up}' already exists!")
+                else:
+                    register_new_usr(name_sign_up, email_sign_up, username_sign_up, password_sign_up)
+                    st.success("Registration Successful!")
+    
     def forgot_password(self) -> None:
         """
         Creates the forgot password widget and after user authentication (email), triggers an email to the user 
@@ -227,24 +215,52 @@ class __login__:
                     if current_passwd_check == True:
                         change_passwd(email_reset_passwd, new_passwd)
                         st.success("Password Reset Successfully!")
-                
-
+                    
     def logout_widget(self) -> None:
         """
         Creates the logout widget in the sidebar only if the user is logged in.
+        Fully rerun-safe and avoids duplicate key errors.
         """
-        if st.session_state['LOGGED_IN'] == True:
-            del_logout = st.sidebar.empty()
-            del_logout.markdown("#")
-            logout_click_check = del_logout.button(self.logout_button_name)
 
-            if logout_click_check == True:
-                st.session_state['LOGOUT_BUTTON_HIT'] = True
-                st.session_state['LOGGED_IN'] = False
-                self.cookies['__streamlit_login_signup_ui_username__'] = '1c9a923f-fb21-4a91-b3f3-5f18e3f01182'
-                del_logout.empty()
-                st.experimental_rerun()
-        
+        # Ensure session_state keys exist
+        st.session_state.setdefault("LOGGED_IN", False)
+        st.session_state.setdefault("LOGOUT_BUTTON_HIT", False)
+        st.session_state.setdefault("rerun_trigger", False)
+        st.session_state.setdefault("LOGOUT_BUTTON_CREATED", False)
+
+        if st.session_state["LOGGED_IN"] and not st.session_state["LOGOUT_BUTTON_CREATED"]:
+            logout_container = st.sidebar.container()
+            logout_container.markdown("#")  # spacing
+
+            # Use id(self) + random to guarantee a unique key
+            import random
+            unique_key = f"logout_button_{id(self)}_{random.randint(0,999999)}"
+
+            logout_click = logout_container.button(
+                label=self.logout_button_name,
+                key=unique_key
+            )
+
+            if logout_click:
+                # Update session state and cookies
+                st.session_state["LOGOUT_BUTTON_HIT"] = True
+                st.session_state["LOGGED_IN"] = False
+                self.cookies["__streamlit_login_signup_ui_username__"] = "1c9a923f-fb21-4a91-b3f3-5f18e3f01182"
+                self.cookies.save()
+
+                # Remove the button from sidebar
+                logout_container.empty()
+
+                # Trigger a rerun safely
+                st.session_state["rerun_trigger"] = not st.session_state["rerun_trigger"]
+
+                # Reset button created flag
+                st.session_state["LOGOUT_BUTTON_CREATED"] = False
+
+            else:
+                # Mark button as created for this session
+                st.session_state["LOGOUT_BUTTON_CREATED"] = True
+
 
     def nav_sidebar(self):
         """

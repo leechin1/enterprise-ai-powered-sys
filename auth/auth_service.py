@@ -35,9 +35,11 @@ def load_lottie(url: str) -> str:
         return None
 
 
-def check_valid_username(username: str) -> bool:
+def check_valid_username(username: str) -> str | None:
     """
     Checks if the username is valid.
+    Returns:
+        None if valid, otherwise a string explaining why it's invalid.
     Rules:
     - Must not be empty or only whitespace
     - Must start with a letter or underscore
@@ -45,24 +47,36 @@ def check_valid_username(username: str) -> bool:
     - Length between 3 and 30 characters
     """
     if not username or username.strip() == "":
-        return False
-
+        return "Username cannot be empty!"
+    
     username = username.strip()
-    pattern = r'^[A-Za-z_][A-Za-z0-9_]{2,29}$'
+    
+    if len(username) < 3 or len(username) > 30:
+        return "Username must be between 3 and 30 characters!"
+    
+    if not re.match(r'^[A-Za-z_]', username):
+        return "Username must start with a letter or underscore!"
+    
+    if not re.fullmatch(r'^[A-Za-z_][A-Za-z0-9_]{2,29}$', username):
+        return "Username can only contain letters, numbers, and underscores!"
+    
+    return None  # valid
 
-    return bool(re.fullmatch(pattern, username))
-
-
-def check_valid_email(email_sign_up: str) -> bool:
+def check_valid_email(email: str) -> str | None:
     """
-    Checks if the user entered a valid email while creating the account.
+    Checks if the email is valid.
+    Returns None if valid, otherwise returns a string explaining why it's invalid.
     """
-    regex = re.compile(r'([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\.[A-Z|a-z]{2,})+')
-
-    if re.fullmatch(regex, email_sign_up):
-        return True
-    return False
-
+    if not email or email.strip() == "":
+        return "Email cannot be empty!"
+    
+    email = email.strip()
+    
+    regex = re.compile(r'([A-Za-z0-9]+[._-])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\.[A-Za-z]{2,})+')
+    if not re.fullmatch(regex, email):
+        return "Email format is invalid! Example: example@mail.com"
+    
+    return None
 
 def check_unique_email(email_sign_up: str) -> bool:
     """

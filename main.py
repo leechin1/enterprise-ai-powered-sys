@@ -8,6 +8,18 @@ from frontend.styles import CUSTOM_CSS
 from frontend.components import dashboard, analytics, activity, rag, marketing_emails, ai_reporting_agent
 from frontend.components.authentication import __login__
 
+# Page configuration
+st.set_page_config(
+    page_title="Misty- AI Enterprise System",
+    page_icon="🎵",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={'About': "Misty AI Enterprise System - AI-powered automation for jazz vinyl retail"}
+)
+
+# Apply custom CSS
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
 
 # Authentication Setup
 __login__obj = __login__(
@@ -32,19 +44,6 @@ if not LOGGED_IN:
 
 
 # Main App (only if logged in)
-
-# Page configuration
-st.set_page_config(
-    page_title="Misty- AI Enterprise System",
-    page_icon="🎵",
-    layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={'About': "Misty AI Enterprise System - AI-powered automation for jazz vinyl retail"}
-)
-
-# Apply custom CSS
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
-
 # Logo setup
 st.logo("assets/logo.png", size="large")
 
@@ -53,7 +52,9 @@ if 'page' not in st.session_state:
     st.session_state.page = 'dashboard'
 
 
-# Sidebar navigation
+# Sidebar
+from streamlit_option_menu import option_menu
+
 with st.sidebar:
     # Logo and title
     st.markdown(
@@ -65,48 +66,30 @@ with st.sidebar:
         """,
         unsafe_allow_html=True
     )
-
     st.markdown("---")
 
     # Navigation menu
-    st.markdown("### Navigation")
-
-    # Dashboard
-    if st.button("📊 Dashboard", use_container_width=True, type="primary" if st.session_state.page == 'dashboard' else "secondary"):
-        st.session_state.page = 'dashboard'
-        st.rerun()
-
-    # Analytics
-    if st.button("📈 Analytics", use_container_width=True, type="primary" if st.session_state.page == 'analytics' else "secondary"):
-        st.session_state.page = 'analytics'
-        st.rerun()
-
-    # AI BI Reporting AGENT
-    if st.button("🤖 Business Reporting", use_container_width=True, type="primary" if st.session_state.page == 'ai_reporting_agent' else "secondary"):
-        st.session_state.page = 'ai_reporting_agent'
-        st.rerun()
-
-    # CRM- Marketing Emails + Review Responses
-    if st.button("📧 CRM", use_container_width=True, type="primary" if st.session_state.page == 'marketing_emails' else "secondary"):
-        st.session_state.page = 'marketing_emails'
-        st.rerun()
-
-    # Knowledge
-    if st.button("🧠 Knowledge", use_container_width=True, type="primary" if st.session_state.page == 'knowledge' else "secondary"):
-        st.session_state.page = 'knowledge'
-        st.rerun()
+    selected = option_menu(
+        menu_title="Navigation",
+        options=["Dashboard", "Analytics", "Business Reporting", "CRM", "Knowledge"],
+        icons=["graph-up", "bar-chart", "robot", "envelope", "book"],
+        menu_icon="list-columns-reverse",
+        default_index=0
+    )
+    st.session_state.page = selected.lower().replace(" ", "_")
 
     st.markdown("---")
 
-    # Display logged-in user
-    if username:
-        st.markdown(f"**Logged in as:** {username}")
+    # Logged-in user
+    username = __login__obj.get_username()
+    st.markdown(f"**Logged in as:** {username}")
 
-    # Logout widget
-    __login__obj.logout_widget()
+    # Logout button
+    if st.button(__login__obj.logout_button_name):
+        __login__obj.logout()  
+        st.session_state.LOGGED_IN = False
 
     st.markdown("---")
-    # Version info
     st.caption("Version 1.0.0")
     st.caption("© 2025 Misty Jazz Records")
 
