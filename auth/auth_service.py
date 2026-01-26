@@ -35,32 +35,27 @@ def load_lottie(url: str) -> str:
         return None
 
 
-def check_valid_username(username: str) -> str | None:
+def check_valid_name(name_sign_up: str) -> str | None:
     """
-    Checks if the username is valid.
+    Validates the user's name during account creation.
+
     Returns:
-        None if valid, otherwise a string explaining why it's invalid.
-    Rules:
-    - Must not be empty or only whitespace
-    - Must start with a letter or underscore
-    - Can contain letters, numbers, and underscores
-    - Length between 3 and 30 characters
+        None if the name is valid,
+        otherwise a string describing what is invalid.
     """
-    if not username or username.strip() == "":
-        return "Username cannot be empty!"
-    
-    username = username.strip()
-    
-    if len(username) < 3 or len(username) > 30:
-        return "Username must be between 3 and 30 characters!"
-    
-    if not re.match(r'^[A-Za-z_]', username):
-        return "Username must start with a letter or underscore!"
-    
-    if not re.fullmatch(r'^[A-Za-z_][A-Za-z0-9_]{2,29}$', username):
-        return "Username can only contain letters, numbers, and underscores!"
-    
-    return None  # valid
+    name_regex = r'^[A-Za-z_][A-Za-z0-9_]*$'
+
+    if not name_sign_up:
+        return "Name cannot be empty."
+
+    if not re.match(name_regex, name_sign_up):
+        return (
+            "Name must start with a letter or underscore and contain "
+            "only letters, numbers, or underscores."
+        )
+
+    return None
+
 
 def check_valid_email(email: str) -> str | None:
     """
@@ -74,7 +69,7 @@ def check_valid_email(email: str) -> str | None:
     
     regex = re.compile(r'([A-Za-z0-9]+[._-])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\.[A-Za-z]{2,})+')
     if not re.fullmatch(regex, email):
-        return "Email format is invalid! Example: example@mail.com"
+        return "Email format is invalid! It should have the structure: example@mail.com"
     
     return None
 

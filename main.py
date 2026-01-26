@@ -4,9 +4,6 @@ AI-powered enterprise automation platform for Misty Jazz Records
 """
 
 import streamlit as st
-from frontend.styles import CUSTOM_CSS
-from frontend.components import dashboard, analytics, activity, rag, marketing_emails, ai_reporting_agent
-from frontend.components.authentication import __login__
 
 # Page configuration
 st.set_page_config(
@@ -16,6 +13,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
     menu_items={'About': "Misty AI Enterprise System - AI-powered automation for jazz vinyl retail"}
 )
+
+from frontend.styles import CUSTOM_CSS
+from frontend.components import dashboard, analytics, activity, rag, marketing_emails, ai_reporting_agent
+from frontend.components.authentication import __login__
+
 
 # Apply custom CSS
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
@@ -32,6 +34,7 @@ __login__obj = __login__(
     hide_footer_bool=True,
     lottie_url='https://assets2.lottiefiles.com/packages/lf20_jcikwtux.json'
 )
+
 
 LOGGED_IN = __login__obj.build_login_ui()
 username = __login__obj.get_username()

@@ -6,7 +6,7 @@ from streamlit_option_menu import option_menu
 from streamlit_cookies_manager import EncryptedCookieManager
 from auth.auth_service import check_usr_pass
 from auth.auth_service import load_lottie
-from auth.auth_service import check_valid_username
+from auth.auth_service import check_valid_name
 from auth.auth_service import check_valid_email
 from auth.auth_service import check_unique_email
 from auth.auth_service import check_unique_usr
@@ -80,43 +80,60 @@ class __login__:
                 username=fetched_cookies['__streamlit_login_signup_ui_username__']
                 return username
  
-
     def login_widget(self) -> None:
+
         """
-        Creates the login widget, checks and sets cookies, authenticates the users.
+        Creates the login widget and authenticates the user, redirecting to the application
         """
 
-        # Checks if cookie exists.
-        if st.session_state['LOGGED_IN'] == False:
-            if st.session_state['LOGOUT_BUTTON_HIT'] == False:
-                fetched_cookies = self.cookies
-                if '__streamlit_login_signup_ui_username__' in fetched_cookies.keys():
-                    if fetched_cookies['__streamlit_login_signup_ui_username__'] != '1c9a923f-fb21-4a91-b3f3-5f18e3f01182':
-                        st.session_state['LOGGED_IN'] = True
+        # Attempt automatic login using stored authentication cookie
+        if not st.session_state.get("LOGGED_IN", False):
+            if not st.session_state.get("LOGOUT_BUTTON_HIT", False):
+                if "__streamlit_login_signup_ui_username__" in self.cookies:
+                    if self.cookies["__streamlit_login_signup_ui_username__"] != "1c9a923f-fb21-4a91-b3f3-5f18e3f01182":
+                        st.session_state["LOGGED_IN"] = True
 
-        if st.session_state['LOGGED_IN'] == False:
-            st.session_state['LOGOUT_BUTTON_HIT'] = False 
+        # Render login form only if the user is not authenticated
+        if not st.session_state["LOGGED_IN"]:
+            st.session_state["LOGOUT_BUTTON_HIT"] = False
 
-            del_login = st.empty()
-            with del_login.form("Login Form"):
-                username = st.text_input("Username", placeholder = 'Your unique username')
-                password = st.text_input("Password", placeholder = 'Your password', type = 'password')
+            # Centered layout
+            left, center, right = st.columns([1, 2, 1])
 
-                st.markdown("###")
-                login_submit_button = st.form_submit_button(label = 'Login')
+            with center:
+                st.subheader("🔐 Login")
 
-                if login_submit_button == True:
-                    authenticate_user_check = check_usr_pass(username, password)
+                with st.form("Login Form"):
+                    
+                    # Username
+                    username = st.text_input(
+                        "Username",
+                        placeholder="Enter your username"
+                    )
 
-                    if authenticate_user_check == False:
-                        st.error("Invalid Username or Password!")
+                    # Password
+                    password = st.text_input(
+                        "Password",
+                        placeholder="Enter your password",
+                        type="password"
+                    )
 
-                    else:
-                        st.session_state['LOGGED_IN'] = True
-                        self.cookies['__streamlit_login_signup_ui_username__'] = username
-                        self.cookies.save()
-                        del_login.empty()
-                        st.session_state["rerun_trigger"] = not st.session_state.get("rerun_trigger", False)
+                    st.markdown("###")
+                    login_submit_button = st.form_submit_button("Login")
+
+                    if login_submit_button:
+                        authenticate_user_check = check_usr_pass(username, password)
+
+                        if not authenticate_user_check:
+                            st.error("Invalid username or password")
+                        else:
+                            st.session_state["LOGGED_IN"] = True
+                            self.cookies["__streamlit_login_signup_ui_username__"] = username
+                            self.cookies.save()
+                            
+                            st.session_state["rerun_trigger"] = not st.session_state.get("rerun_trigger", False)
+                            st.stop()
+
 
 
     def animation(self) -> None:
@@ -126,13 +143,14 @@ class __login__:
         lottie_json = load_lottie(self.lottie_url)
         st_lottie(lottie_json, width = self.width, height = self.height)
 
+    
     def sign_up_widget(self) -> None:
         """
         Creates the sign-up widget and stores the user info in a secure way in the _secret_auth_.json file.
         """
         with st.form("Sign Up Form"):
             name_sign_up = st.text_input("Name *", placeholder='Please enter your name')
-            username_error = check_valid_username(name_sign_up)
+            username_error = check_valid_name(name_sign_up)
 
             email_sign_up = st.text_input("Email *", placeholder='Please enter your email')
             email_error = check_valid_email(email_sign_up)
@@ -216,6 +234,17 @@ class __login__:
                         change_passwd(email_reset_passwd, new_passwd)
                         st.success("Password Reset Successfully!")
                     
+    def logout(self):
+        """
+        Logs out the user: clears session and cookies, then reruns Streamlit.
+        """
+        st.session_state["LOGGED_IN"] = False
+        st.session_state["LOGOUT_BUTTON_HIT"] = True
+        self.cookies["__streamlit_login_signup_ui_username__"] = "1c9a923f-fb21-4a91-b3f3-5f18e3f01182"
+        self.cookies.save()
+        st.session_state["rerun_trigger"] = not st.session_state.get("rerun_trigger", False)
+        st.stop()
+        
     def logout_widget(self) -> None:
         """
         Creates the logout widget in the sidebar only if the user is logged in.
