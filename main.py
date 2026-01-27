@@ -74,8 +74,8 @@ with st.sidebar:
     # Navigation menu
     selected = option_menu(
         menu_title="Navigation",
-        options=["Dashboard", "Analytics", "Business Reporting", "CRM", "Knowledge"],
-        icons=["graph-up", "bar-chart", "robot", "envelope", "book"],
+        options=["Dashboard", "Analytics", "Business Reporting", "CRM", "Knowledge", "Activity"],
+        icons=["graph-up", "bar-chart", "robot", "envelope", "book", "activity"],
         menu_icon="list-columns-reverse",
         default_index=0
     )

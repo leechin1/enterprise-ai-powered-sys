@@ -49,7 +49,7 @@ from services.tools.business_generation_tools import (
 
 load_dotenv()
 
-MODEL = os.getenv('VERTEX_MODEL', 'gemini-2.0-flash')
+MODEL = os.getenv('VERTEX_MODEL')
 PROJECT_ID = os.getenv('GCP_PROJECT_ID')
 LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
 
@@ -157,6 +157,90 @@ class AIIssuesAgent:
         except Exception as e:
             print(f"JSON extraction/validation error: {e}")
             print(f"Response text: {response_text[:500]}")
+
+            # Try to salvage partial data for FixesOutput
+            if schema_class.__name__ == 'FixesOutput':
+                return self._salvage_fixes_data(response_text)
+
+            return None
+
+    def _salvage_fixes_data(self, response_text: str) -> Dict[str, Any]:
+        """Try to salvage fixes data even if validation fails, by fixing common issues"""
+        try:
+            # Try to extract JSON from code blocks
+            json_pattern = r'```(?:json)?\s*\n?(.*?)\n?```'
+            json_match = re.search(json_pattern, response_text, re.DOTALL)
+
+            if json_match:
+                json_str = json_match.group(1).strip()
+            else:
+                json_str = response_text.strip()
+
+            data = json.loads(json_str)
+
+            if 'fixes' not in data:
+                return None
+
+            # Clean up each fix
+            valid_roles = {'customer', 'supplier', 'staff', 'manager'}
+            valid_email_types = {'customer_notification', 'inventory_alert', 'payment_followup', 'management_report'}
+
+            for fix in data['fixes']:
+                # Migrate old schema fields to new schema
+                if 'action_steps' in fix and 'automated_actions' not in fix:
+                    fix['automated_actions'] = fix['action_steps']
+                if 'automated_actions' not in fix:
+                    fix['automated_actions'] = ["Action pending review"]
+
+                # Remove old tools_to_use field if present
+                if 'tools_to_use' in fix:
+                    del fix['tools_to_use']
+
+                # Clean up recipients
+                if 'recipients' in fix and isinstance(fix['recipients'], list):
+                    valid_recipients = []
+                    for r in fix['recipients']:
+                        if isinstance(r, dict):
+                            role = r.get('role', '').lower().replace('_', '').replace('-', '').replace(' ', '')
+                            if role in valid_roles:
+                                r['role'] = role
+                                valid_recipients.append(r)
+                            elif role in ['customerservice', 'customercare']:
+                                r['role'] = 'customer'
+                                valid_recipients.append(r)
+                            elif role in ['inventorymanager', 'warehousemanager', 'procurement']:
+                                r['role'] = 'manager'
+                                valid_recipients.append(r)
+                            else:
+                                print(f"Skipping recipient with invalid role: {r.get('role')}")
+                    fix['recipients'] = valid_recipients
+                else:
+                    fix['recipients'] = []
+
+                # Clean up generated_emails
+                if 'generated_emails' in fix and isinstance(fix['generated_emails'], list):
+                    valid_emails = []
+                    for email in fix['generated_emails']:
+                        if isinstance(email, dict):
+                            email_type = email.get('email_type', '').lower().replace('-', '_').replace(' ', '_')
+                            if email_type in valid_email_types:
+                                email['email_type'] = email_type
+                                valid_emails.append(email)
+                            else:
+                                # Default to management_report if type is invalid
+                                email['email_type'] = 'management_report'
+                                valid_emails.append(email)
+                    fix['generated_emails'] = valid_emails
+                else:
+                    fix['generated_emails'] = []
+
+            # Re-validate with cleaned data
+            from services.schemas.ba_agent_schemas import FixesOutput
+            validated = FixesOutput(**data)
+            return validated.model_dump()
+
+        except Exception as e:
+            print(f"Salvage attempt failed: {e}")
             return None
 
     @observe()
@@ -425,13 +509,74 @@ class AIIssuesAgent:
                 "error": str(e)
             }
 
+    def _fetch_recipients_for_category(self, category: str) -> List[Dict[str, Any]]:
+        """
+        Fetch customer/recipient contact info based on issue category.
+        Runs targeted SQL queries to get names and emails for notifications.
+        """
+        if not self.supabase:
+            return []
+
+        recipient_queries = {
+            "payments": """
+                SELECT DISTINCT
+                    c.first_name || ' ' || c.last_name as name,
+                    c.email,
+                    p.status as payment_status,
+                    o.order_number,
+                    p.amount
+                FROM payments p
+                JOIN orders o ON p.order_id = o.order_id
+                JOIN customers c ON o.customer_id = c.customer_id
+                WHERE p.status IN ('pending', 'failed')
+                ORDER BY p.payment_date DESC
+                LIMIT 20
+            """,
+            "customers": """
+                SELECT DISTINCT
+                    c.first_name || ' ' || c.last_name as name,
+                    c.email,
+                    r.rating,
+                    r.review_text
+                FROM reviews r
+                JOIN customers c ON r.customer_id = c.customer_id
+                WHERE r.rating <= 2
+                ORDER BY r.created_at DESC
+                LIMIT 20
+            """,
+            "revenue": """
+                SELECT DISTINCT
+                    c.first_name || ' ' || c.last_name as name,
+                    c.email,
+                    COUNT(o.order_id) as order_count,
+                    SUM(o.total) as total_spent
+                FROM customers c
+                JOIN orders o ON c.customer_id = o.customer_id
+                GROUP BY c.customer_id, c.first_name, c.last_name, c.email
+                ORDER BY total_spent DESC
+                LIMIT 10
+            """
+        }
+
+        query = recipient_queries.get(category)
+        if not query:
+            return []
+
+        try:
+            result = self.supabase.rpc('execute_readonly_sql', {'sql_query': query}).execute()
+            return result.data if result.data else []
+        except Exception as e:
+            print(f"Error fetching recipients for {category}: {e}")
+            return []
+
     @observe()
-    def propose_fixes(self, issues: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def propose_fixes(self, issues: List[Dict[str, Any]], query_results: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         STAGE 2: Propose concrete fixes for identified issues using available tools
 
         Args:
             issues: List of identified issues from Stage 1
+            query_results: Original SQL query results (for extracting recipient info)
 
         Returns:
             Dictionary with proposed fixes and metadata
@@ -446,9 +591,34 @@ class AIIssuesAgent:
                 for i, issue in enumerate(issues[:7])  # Limit to 7 issues
             ])
 
+            # Fetch additional recipient data for relevant categories
+            recipient_data = {}
+            categories_needing_recipients = {'payments', 'customers', 'revenue'}
+            for issue in issues[:7]:
+                cat = issue.get('category', '')
+                if cat in categories_needing_recipients and cat not in recipient_data:
+                    recipient_data[cat] = self._fetch_recipients_for_category(cat)
+
+            # Format query results for recipient extraction
+            query_data_summary = ""
+            if query_results:
+                query_data_summary = "\n\n**QUERY RESULTS DATA (use this to extract recipient information):**\n\n"
+                query_data_summary += "\n\n".join([
+                    f"Query {res['query_id']}: {res['purpose']}\n"
+                    f"Data ({res['row_count']} rows): {json.dumps(res['data'][:20], indent=2) if res['success'] else 'Query failed'}"
+                    for res in query_results
+                ])
+
+            # Add freshly fetched recipient data
+            if recipient_data:
+                query_data_summary += "\n\n**ADDITIONAL RECIPIENT DATA (customer contact information):**\n\n"
+                for cat, data in recipient_data.items():
+                    if data:
+                        query_data_summary += f"\n{cat.upper()} Recipients ({len(data)} found):\n{json.dumps(data[:15], indent=2)}\n"
+
             # Invoke Stage 2 agent
             result = self.fixes_agent.invoke({
-                "messages": [("user", f"Based on these identified business issues, propose concrete fixes using the available tools:\n\n{issues_summary}\n\nProvide actionable solutions that a non-technical user can understand and execute.")]
+                "messages": [("user", f"Generate fully automated fix proposals for these business issues. Management will only need to click 'Approve' - all emails must be pre-written and ready to send.\n\n{issues_summary}\n{query_data_summary}\n\nIMPORTANT: Generate complete, ready-to-send emails with real customer data. Do NOT tell management to 'use tools' - everything must be automated.")]
             })
 
             # Extract response
@@ -470,18 +640,23 @@ class AIIssuesAgent:
             # Extract and validate JSON
             fixes_data = self._extract_and_validate_json(agent_response, FixesOutput)
 
-            # Fallback if validation failed
+            # Fallback if validation failed - generate basic automated fix
             if not fixes_data or 'fixes' not in fixes_data:
                 fixes_data = {
                     "fixes": [
                         {
                             "issue_id": issue['title'],
-                            "fix_title": f"Address {issue['title']}",
-                            "fix_description": "Manual intervention required",
-                            "tools_to_use": [],
-                            "action_steps": ["Review the issue", "Take appropriate action"],
-                            "expected_outcome": "Issue resolution",
-                            "priority": "urgent"
+                            "fix_title": f"Review and Address: {issue['title'][:50]}",
+                            "fix_description": f"This issue requires management review. The system has identified a {issue.get('severity', 'medium')} priority {issue.get('category', 'operational')} issue that needs attention. Upon approval, relevant stakeholders will be notified.",
+                            "automated_actions": [
+                                "Management notification will be sent",
+                                "Issue will be logged in the tracking system",
+                                "Follow-up reminder will be scheduled"
+                            ],
+                            "expected_outcome": "Issue acknowledged and tracked for resolution",
+                            "priority": "urgent" if issue.get('severity') == 'critical' else "scheduled",
+                            "recipients": [],
+                            "generated_emails": []
                         }
                         for issue in issues[:7]
                     ]
@@ -505,15 +680,18 @@ class AIIssuesAgent:
             }
 
     @observe()
-    def analyze_and_propose_fixes(self) -> Dict[str, Any]:
+    def analyze_and_propose_fixes(self, query_results: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Complete two-stage analysis: Identify issues → Propose fixes
+
+        Args:
+            query_results: Optional query results for recipient extraction in Stage 2
 
         Returns:
             Dictionary with both issues and fixes
         """
         # Stage 1: Identify issues
-        issues_result = self.identify_business_issues()
+        issues_result = self.identify_business_issues(query_results)
 
         if not issues_result["success"]:
             return issues_result
@@ -521,8 +699,8 @@ class AIIssuesAgent:
         # Extract issues
         issues = issues_result["data"]["issues"]
 
-        # Stage 2: Propose fixes
-        fixes_result = self.propose_fixes(issues)
+        # Stage 2: Propose fixes (pass query results for recipient extraction)
+        fixes_result = self.propose_fixes(issues, query_results)
 
         # Combine results
         return {

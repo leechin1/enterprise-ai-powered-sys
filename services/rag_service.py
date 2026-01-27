@@ -1,24 +1,25 @@
 """
 RAG Service - Retrieval-Augmented Generation for Enterprise Documents
 Handles document embedding, storage, retrieval, and chat with knowledge base
+Uses new Google GenAI SDK for Vertex AI
 """
 
 import os
 import re
+import json
 import logging
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client, Client
-import vertexai
-from vertexai.language_models import TextEmbeddingModel
-from langchain_google_vertexai import ChatVertexAI
+from google import genai
+from google.genai import types
 from langfuse import observe
 
 load_dotenv()
 
 # Configuration
-MODEL = os.getenv('VERTEX_MODEL', 'gemini-2.0-flash')
+MODEL = os.getenv('VERTEX_MODEL', 'gemini-2.5-flash')
 PROJECT_ID = os.getenv('GCP_PROJECT_ID')
 LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
 EMBEDDING_MODEL = "text-embedding-004"
@@ -34,6 +35,7 @@ class RAGService:
     """
     RAG Service for enterprise document knowledge base
     Handles embedding generation, document indexing, and retrieval-augmented chat
+    Uses new Google GenAI SDK
     """
 
     def __init__(self):
@@ -46,20 +48,16 @@ class RAGService:
 
         self.supabase: Client = create_client(supabase_url, supabase_key)
 
-        # Initialize Vertex AI
-        if PROJECT_ID:
-            vertexai.init(project=PROJECT_ID, location=LOCATION)
-
-        # Initialize embedding model via Vertex AI
-        self.embedding_model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
-
-        # Initialize LLM for chat via Vertex AI (uses GCP credits)
-        self.llm = ChatVertexAI(
-            model=MODEL,
+        # Initialize GenAI client with Vertex AI
+        self.client = genai.Client(
+            vertexai=True,
             project=PROJECT_ID,
-            location=LOCATION,
-            temperature=0.7,
+            location=LOCATION
         )
+
+        # Model names
+        self.model_name = MODEL
+        self.embedding_model_name = EMBEDDING_MODEL
 
         # System prompt for RAG chatbot
         self.system_prompt = """You are a helpful AI assistant for Misty Jazz Records, a vinyl record store.
@@ -123,7 +121,7 @@ Be concise but thorough. Maintain a professional, helpful tone."""
 
     def _generate_embedding(self, text: str) -> List[float]:
         """
-        Generate embedding for text using Vertex AI's embedding model
+        Generate embedding for text using GenAI embedding model
 
         Args:
             text: Text to embed
@@ -131,12 +129,15 @@ Be concise but thorough. Maintain a professional, helpful tone."""
         Returns:
             Embedding vector as list of floats
         """
-        embeddings = self.embedding_model.get_embeddings([text])
-        return embeddings[0].values
+        result = self.client.models.embed_content(
+            model=self.embedding_model_name,
+            contents=text
+        )
+        return result.embeddings[0].values
 
     def _generate_query_embedding(self, query: str) -> List[float]:
         """
-        Generate embedding for a search query using Vertex AI
+        Generate embedding for a search query
 
         Args:
             query: Search query text
@@ -144,8 +145,7 @@ Be concise but thorough. Maintain a professional, helpful tone."""
         Returns:
             Embedding vector as list of floats
         """
-        embeddings = self.embedding_model.get_embeddings([query])
-        return embeddings[0].values
+        return self._generate_embedding(query)
 
     def index_document(self, document_path: str, metadata: Optional[Dict] = None) -> Dict[str, Any]:
         """
@@ -313,7 +313,12 @@ Be concise but thorough. Maintain a professional, helpful tone."""
             results_with_scores = []
             for doc in result.data:
                 if doc.get('embedding'):
-                    similarity = cosine_similarity(query_embedding, doc['embedding'])
+                    # Parse embedding if it's stored as JSON string
+                    doc_embedding = doc['embedding']
+                    if isinstance(doc_embedding, str):
+                        doc_embedding = json.loads(doc_embedding)
+
+                    similarity = cosine_similarity(query_embedding, doc_embedding)
                     results_with_scores.append({
                         'id': doc.get('id'),
                         'document_name': doc.get('document_name'),
@@ -390,16 +395,17 @@ Be concise but thorough. Maintain a professional, helpful tone."""
             # Format context
             context = self._format_context(relevant_docs)
 
-            # Build messages
-            messages = [
-                ("system", self.system_prompt),
-            ]
+            # Build conversation contents
+            contents = []
 
             # Add chat history if provided
             if chat_history:
                 for msg in chat_history[-6:]:  # Last 6 messages for context
-                    role = "human" if msg.get("role") == "user" else "assistant"
-                    messages.append((role, msg.get("content", "")))
+                    role = "user" if msg.get("role") == "user" else "model"
+                    contents.append(types.Content(
+                        role=role,
+                        parts=[types.Part.from_text(text=msg.get("content", ""))]
+                    ))
 
             # Add current query with context
             user_message = f"""Based on the following context from the knowledge base, please answer the question.
@@ -411,11 +417,24 @@ QUESTION: {query}
 
 Please provide a helpful, accurate answer based on the context provided. If the context doesn't contain relevant information, say so clearly."""
 
-            messages.append(("human", user_message))
+            contents.append(types.Content(
+                role="user",
+                parts=[types.Part.from_text(text=user_message)]
+            ))
 
-            # Get response from LLM
-            response = self.llm.invoke(messages)
-            answer = response.content
+            # Generate response using GenAI SDK
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=self.system_prompt,
+                    temperature=0.7,
+                    top_p=0.95,
+                    top_k=40,
+                )
+            )
+
+            answer = response.text
 
             # Extract unique sources
             sources = []
@@ -432,7 +451,7 @@ Please provide a helpful, accurate answer based on the context provided. If the 
             result = {
                 "success": True,
                 "answer": answer,
-                "model": MODEL
+                "model": self.model_name
             }
 
             if include_sources:
