@@ -17,6 +17,7 @@ st.set_page_config(
 from frontend.styles import CUSTOM_CSS
 from frontend.components import dashboard, analytics, activity, rag, marketing_emails, ai_reporting_agent
 from frontend.components.authentication import __login__
+from frontend.components import admin_configure
 
 
 # Apply custom CSS
@@ -74,8 +75,8 @@ with st.sidebar:
     # Navigation menu
     selected = option_menu(
         menu_title="Navigation",
-        options=["Dashboard", "Analytics", "Business Reporting", "CRM", "Knowledge", "Activity"],
-        icons=["graph-up", "bar-chart", "robot", "envelope", "book", "activity"],
+        options=["Dashboard", "Analytics", "Business Reporting", "CRM", "Knowledge", "Activity", "Configure"],
+        icons=["graph-up", "bar-chart", "robot", "envelope", "book", "activity", "gear"],
         menu_icon="list-columns-reverse",
         default_index=0
     )
@@ -83,8 +84,9 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Logged-in user
+    # Logged-in user - store in session state for other components
     username = __login__obj.get_username()
+    st.session_state['username'] = username
     st.markdown(f"**Logged in as:** {username}")
 
     # Logout button
@@ -110,11 +112,14 @@ elif st.session_state.page == 'activity':
 elif st.session_state.page == 'knowledge':
     rag.render_knowledge()
 
-elif st.session_state.page == 'marketing_emails':
+elif st.session_state.page == 'crm':
     marketing_emails.render_marketing_emails()
 
-elif st.session_state.page == 'ai_reporting_agent':
+elif st.session_state.page == 'business_reporting':
     ai_reporting_agent.render_ai_reporting_agent()
+
+elif st.session_state.page == 'configure':
+    admin_configure.render_admin_configure(company_name="Misty Jazz")
 
 else:
     # Default to dashboard if unknown page
