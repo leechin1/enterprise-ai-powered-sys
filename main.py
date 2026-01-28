@@ -16,6 +16,24 @@ for section_name in st.secrets:
     else:
         os.environ[section_name] = str(section)
 
+st.title("Debug Mode")
+st.write("If you see this, the server is running!")
+
+# Test if secrets are working
+try:
+    st.write("EmailJS Key Found:", "emailjs" in st.secrets)
+    st.write("GCP ID Found:", "gcp" in st.secrets)
+except Exception as e:
+    st.error(f"Secrets Error: {e}")
+
+# Test if the folder structure is recognized
+try:
+    from frontend.components import authentication
+    st.success("Folder structure is OK!")
+except Exception as e:
+    st.error(f"Import Error: {e}")
+
+
 # --- 2. PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="Misty - AI Enterprise System",
@@ -26,7 +44,6 @@ st.set_page_config(
 )
 
 # --- 3. COMPONENT IMPORTS ---
-# We import these AFTER environment variables are set to avoid initialization crashes
 from frontend.styles import CUSTOM_CSS
 from frontend.components import dashboard, analytics, activity, rag, marketing_emails, ai_reporting_agent
 from frontend.components.authentication import __login__
