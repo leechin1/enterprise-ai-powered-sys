@@ -4,29 +4,42 @@ AI-powered enterprise automation platform for Misty Jazz Records
 """
 
 import streamlit as st
+import os
 
-# Page configuration
+# --- 1. SECRETS INJECTION (MUST BE FIRST) ---
+# This allows your existing components to use os.getenv() successfully
+for section_name in st.secrets:
+    section = st.secrets[section_name]
+    if isinstance(section, (dict, st.runtime.secrets.AttrDict)):
+        for key, value in section.items():
+            os.environ[key] = str(value)
+    else:
+        os.environ[section_name] = str(section)
+
+# --- 2. PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="Misty- AI Enterprise System",
+    page_title="Misty - AI Enterprise System",
     page_icon="🎵",
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={'About': "Misty AI Enterprise System - AI-powered automation for jazz vinyl retail"}
 )
 
+# --- 3. COMPONENT IMPORTS ---
+# We import these AFTER environment variables are set to avoid initialization crashes
 from frontend.styles import CUSTOM_CSS
 from frontend.components import dashboard, analytics, activity, rag, marketing_emails, ai_reporting_agent
 from frontend.components.authentication import __login__
 from frontend.components import admin_configure
-
+from streamlit_option_menu import option_menu
 
 # Apply custom CSS
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-
-# Authentication Setup
+# --- 4. AUTHENTICATION SETUP ---
 __login__obj = __login__(
-    auth_token="courier_auth_token",  # Replace with st.secrets
+    # Pulling from your migrated secrets.toml [emailjs] section
+    auth_token=st.secrets["emailjs"]["EMAILJS_PRIVATE_KEY"], 
     company_name="Shims",
     width=200,
     height=250,
@@ -36,31 +49,19 @@ __login__obj = __login__(
     lottie_url='https://assets2.lottiefiles.com/packages/lf20_jcikwtux.json'
 )
 
-
 LOGGED_IN = __login__obj.build_login_ui()
-username = __login__obj.get_username()
-
 
 # Redirect to Login if not logged in
 if not LOGGED_IN:
-    # Stop Streamlit from rendering the rest of the app
     st.stop()
 
-
-# Main App (only if logged in)
-# Logo setup
+# --- 5. MAIN APP (ONLY IF LOGGED IN) ---
 st.logo("assets/logo.png", size="large")
 
-# Initialize session state
 if 'page' not in st.session_state:
     st.session_state.page = 'dashboard'
 
-
-# Sidebar
-from streamlit_option_menu import option_menu
-
 with st.sidebar:
-    # Logo and title
     st.markdown(
         """
         <div style="text-align: center; padding: 1rem 0;">
@@ -72,7 +73,6 @@ with st.sidebar:
     )
     st.markdown("---")
 
-    # Navigation menu
     selected = option_menu(
         menu_title="Navigation",
         options=["Dashboard", "Analytics", "Business Reporting", "CRM", "Knowledge", "Activity", "Configure"],
@@ -83,45 +83,34 @@ with st.sidebar:
     st.session_state.page = selected.lower().replace(" ", "_")
 
     st.markdown("---")
-
-    # Logged-in user - store in session state for other components
+    
     username = __login__obj.get_username()
     st.session_state['username'] = username
     st.markdown(f"**Logged in as:** {username}")
 
-    # Logout button
-    if st.button(__login__obj.logout_button_name):
+    if st.button("Logout"):
         __login__obj.logout()  
-        st.session_state.LOGGED_IN = False
+        st.rerun() # Use rerun instead of manual boolean set for cleaner state reset
 
     st.markdown("---")
     st.caption("Version 1.0.0")
-    st.caption("© 2025 Misty Jazz Records")
+    st.caption("© 2026 Misty Jazz Records")
 
-
-# Main content area
+# --- 6. ROUTING LOGIC ---
 if st.session_state.page == 'dashboard':
     dashboard.render_dashboard()
-
 elif st.session_state.page == 'analytics':
     analytics.render_analytics()
-
 elif st.session_state.page == 'activity':
     activity.render_activity()
-
 elif st.session_state.page == 'knowledge':
     rag.render_knowledge()
-
 elif st.session_state.page == 'crm':
     marketing_emails.render_marketing_emails()
-
 elif st.session_state.page == 'business_reporting':
     ai_reporting_agent.render_ai_reporting_agent()
-
 elif st.session_state.page == 'configure':
     admin_configure.render_admin_configure(company_name="Misty Jazz")
-
 else:
-    # Default to dashboard if unknown page
     st.session_state.page = 'dashboard'
     st.rerun()

@@ -1,5 +1,5 @@
 .env
 steps.txt
 **/__pycache__/
-
+.streamlit/secrets.toml
 db_configure/data-gen/cooler_jazz_albums
