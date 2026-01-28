@@ -103,6 +103,7 @@ GEMINI_MODEL=gemini-2.5-flash
 GCP_PROJECT_ID=your_project_id
 GCP_LOCATION=us-central1
 VERTEX_MODEL=gemini-2.5-flash
+GOOGLE_APPLICATION_CREDENTIALS_JSON =your_gcp_key
 
 [supabase]
 SUPABASE_URL=https://your-project.supabase.co
