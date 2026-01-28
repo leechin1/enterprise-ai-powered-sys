@@ -1,37 +1,34 @@
 """
 Business Generation Tools
-Content generation and action tools for the AI Business Consultant Agent
-Includes email generation, recommendations, and transaction actions
+Content generation and action tools for the AI Business Consultant Agent.
+Includes email generation, recommendations, and transaction actions.
 """
 
 import os
 from typing import List
-from dotenv import load_dotenv
-from supabase import create_client, Client
+from pathlib import Path
 
-load_dotenv()
+from .base import BaseBusinessTools
 
 
-class BusinessGenerationTools:
-    """Tools for generating content and performing actions (write operations)"""
+class BusinessGenerationTools(BaseBusinessTools):
+    """Tools for generating content and performing actions (write operations)."""
 
     def __init__(self):
-        # Initialize Supabase client for actions
-        supabase_url = os.getenv('SUPABASE_URL')
-        supabase_key = os.getenv('SUPABASE_SECRET_KEY')
-        self.supabase_client: Client = create_client(supabase_url, supabase_key)
+        super().__init__()
+        # Path to templates directory (one level up from tools/)
+        self.templates_dir = Path(__file__).parent.parent / "tools_templates"
 
-        # Load prompt templates
-        self.prompts_dir = "prompts_templates"
-
-    def _load_prompt(self, filename: str) -> str:
-        """Load a prompt template from the prompts directory."""
+    def _load_template(self, filename: str) -> str:
+        """Load a template file from the templates directory."""
         try:
-            filepath = os.path.join(self.prompts_dir, filename)
-            with open(filepath, 'r') as f:
-                return f.read()
+            filepath = self.templates_dir / filename
+            if filepath.exists():
+                return filepath.read_text()
+            # Fallback: return None to use inline templates
+            return None
         except Exception as e:
-            return f"Error loading prompt template {filename}: {str(e)}"
+            return None
 
     def generate_customer_email(self, customer_id: str, email_type: str, context: str) -> str:
         """
@@ -47,7 +44,7 @@ class BusinessGenerationTools:
         """
         try:
             # Fetch customer details
-            customer_result = self.supabase_client.table('customers').select(
+            customer_result = self.supabase.table('customers').select(
                 'first_name, last_name, email'
             ).eq('customer_id', customer_id).execute()
 
@@ -56,18 +53,36 @@ class BusinessGenerationTools:
 
             customer = customer_result.data[0]
 
-            # Load template
-            template = self._load_prompt('customer_email_template.txt')
+            # Try to load template
+            template = self._load_template('customer_email_template.txt')
 
-            # Format template
-            email = template.format(
-                email=customer['email'],
-                subject=email_type.replace('_', ' ').title(),
-                first_name=customer['first_name'],
-                last_name=customer['last_name'],
-                context=context
-            )
+            if template:
+                email = template.format(
+                    email=customer['email'],
+                    subject=email_type.replace('_', ' ').title(),
+                    first_name=customer['first_name'],
+                    last_name=customer['last_name'],
+                    context=context
+                )
+            else:
+                # Fallback inline template
+                email = f"""
+EMAIL TEMPLATE GENERATED
+========================
 
+To: {customer['email']}
+Subject: {email_type.replace('_', ' ').title()} - Misty Jazz Records
+
+Dear {customer['first_name']} {customer['last_name']},
+
+{context}
+
+Best regards,
+Misty Jazz Records Team
+
+========================
+Note: This is a generated template. Review before sending.
+"""
             return email
 
         except Exception as e:
@@ -90,11 +105,11 @@ class BusinessGenerationTools:
             # Fetch album details
             albums_data = []
             for album_id in album_ids[:10]:  # Limit to 10 items
-                album_result = self.supabase_client.table('albums').select(
+                album_result = self.supabase.table('albums').select(
                     'title, artist'
                 ).eq('album_id', album_id).execute()
 
-                inventory_result = self.supabase_client.table('inventory').select(
+                inventory_result = self.supabase.table('inventory').select(
                     'quantity'
                 ).eq('album_id', album_id).execute()
 
@@ -109,12 +124,31 @@ class BusinessGenerationTools:
             for i, album in enumerate(albums_data, 1):
                 items_list += f"{i}. '{album['title']}' by {album['artist']} - {album['quantity']} units remaining\n"
 
-            # Load template
-            template = self._load_prompt('inventory_alert_email_template.txt')
+            # Try to load template
+            template = self._load_template('inventory_alert_email_template.txt')
 
-            # Format template
-            email = template.format(items_list=items_list)
+            if template:
+                email = template.format(items_list=items_list)
+            else:
+                # Fallback inline template
+                email = f"""
+INVENTORY ALERT EMAIL
+=====================
 
+To: inventory@mistyjazzrecords.com
+Subject: LOW STOCK ALERT - Immediate Action Required
+
+Dear Inventory Manager,
+
+The following items have critically low stock levels and require immediate reordering:
+
+{items_list}
+Please review and place restock orders as soon as possible to avoid stockouts.
+
+Best regards,
+Misty AI Business Intelligence System
+=====================
+"""
             return email
 
         except Exception as e:
@@ -133,7 +167,7 @@ class BusinessGenerationTools:
         """
         try:
             # Check if payment exists and is cancellable
-            payment_result = self.supabase_client.table('payments').select(
+            payment_result = self.supabase.table('payments').select(
                 'status, order_id, amount'
             ).eq('payment_id', payment_id).execute()
 
@@ -146,22 +180,34 @@ class BusinessGenerationTools:
                 return f"Cannot cancel completed payment {payment_id}. Refund process required instead."
 
             # Update payment status to cancelled
-            self.supabase_client.table('payments').update({
+            self.supabase.table('payments').update({
                 'status': 'cancelled'
             }).eq('payment_id', payment_id).execute()
 
-            # Load template
-            template = self._load_prompt('transaction_cancelled_template.txt')
+            # Try to load template
+            template = self._load_template('transaction_cancelled_template.txt')
 
-            # Format template
-            confirmation = template.format(
-                payment_id=payment_id,
-                order_id=payment['order_id'],
-                amount=f"{payment['amount']:,.2f}",
-                previous_status=payment['status'],
-                reason=reason
-            )
-
+            if template:
+                confirmation = template.format(
+                    payment_id=payment_id,
+                    order_id=payment['order_id'],
+                    amount=f"{payment['amount']:,.2f}",
+                    previous_status=payment['status'],
+                    reason=reason
+                )
+            else:
+                # Fallback inline template
+                confirmation = f"""
+TRANSACTION CANCELLED
+====================
+Payment ID: {payment_id}
+Order ID: {payment['order_id']}
+Amount: ${payment['amount']:,.2f}
+Previous Status: {payment['status']}
+New Status: cancelled
+Reason: {reason}
+====================
+"""
             return confirmation
 
         except Exception as e:
@@ -179,7 +225,7 @@ class BusinessGenerationTools:
         """
         try:
             # Get album details
-            album_result = self.supabase_client.table('albums').select(
+            album_result = self.supabase.table('albums').select(
                 'title, artist'
             ).eq('album_id', album_id).execute()
 
@@ -189,20 +235,20 @@ class BusinessGenerationTools:
             album = album_result.data[0]
 
             # Get current inventory
-            inventory_result = self.supabase_client.table('inventory').select(
+            inventory_result = self.supabase.table('inventory').select(
                 'quantity'
             ).eq('album_id', album_id).execute()
 
             current_stock = inventory_result.data[0]['quantity'] if inventory_result.data else 0
 
             # Get sales history
-            sales_result = self.supabase_client.table('sales').select(
+            sales_result = self.supabase.table('sales').select(
                 'quantity_change'
             ).eq('inventory_id', album_id).execute()
 
             total_sold = abs(sum([s['quantity_change'] for s in sales_result.data])) if sales_result.data else 0
 
-            # Simple recommendation logic
+            # Recommendation logic based on demand
             if total_sold > 50:
                 recommended_qty = 100
                 rationale = "High demand item"
@@ -213,19 +259,30 @@ class BusinessGenerationTools:
                 recommended_qty = 25
                 rationale = "Standard restock"
 
-            # Load template
-            template = self._load_prompt('restock_recommendation_template.txt')
+            # Try to load template
+            template = self._load_template('restock_recommendation_template.txt')
 
-            # Format template
-            recommendation = template.format(
-                title=album['title'],
-                artist=album['artist'],
-                current_stock=current_stock,
-                total_sold=total_sold,
-                recommended_qty=recommended_qty,
-                rationale=rationale
-            )
-
+            if template:
+                recommendation = template.format(
+                    title=album['title'],
+                    artist=album['artist'],
+                    current_stock=current_stock,
+                    total_sold=total_sold,
+                    recommended_qty=recommended_qty,
+                    rationale=rationale
+                )
+            else:
+                # Fallback inline template
+                recommendation = f"""
+RESTOCK RECOMMENDATION
+======================
+Album: '{album['title']}' by {album['artist']}
+Current Stock: {current_stock} units
+Total Sold: {total_sold} units
+Recommended Restock: {recommended_qty} units
+Rationale: {rationale}
+======================
+"""
             return recommendation
 
         except Exception as e:
@@ -242,8 +299,7 @@ def generate_customer_email(customer_id: str, email_type: str, context: str) -> 
         email_type: Type of email (e.g., 'low_stock_notification', 'thank_you', 'promotion')
         context: Additional context for the email
     """
-    tools = BusinessGenerationTools()
-    return tools.generate_customer_email(customer_id, email_type, context)
+    return BusinessGenerationTools().generate_customer_email(customer_id, email_type, context)
 
 
 def generate_inventory_alert_email(album_ids: str) -> str:
@@ -253,10 +309,9 @@ def generate_inventory_alert_email(album_ids: str) -> str:
     Args:
         album_ids: Comma-separated list of album IDs with low stock
     """
-    tools = BusinessGenerationTools()
     # Convert string to list
     ids_list = [id.strip() for id in album_ids.split(',')]
-    return tools.generate_inventory_alert_email(ids_list)
+    return BusinessGenerationTools().generate_inventory_alert_email(ids_list)
 
 
 def cancel_transaction(payment_id: str, reason: str) -> str:
@@ -267,8 +322,7 @@ def cancel_transaction(payment_id: str, reason: str) -> str:
         payment_id: Payment UUID to cancel
         reason: Reason for cancellation
     """
-    tools = BusinessGenerationTools()
-    return tools.cancel_transaction(payment_id, reason)
+    return BusinessGenerationTools().cancel_transaction(payment_id, reason)
 
 
 def recommend_restock_quantity(album_id: str) -> str:
@@ -278,5 +332,4 @@ def recommend_restock_quantity(album_id: str) -> str:
     Args:
         album_id: Album UUID
     """
-    tools = BusinessGenerationTools()
-    return tools.recommend_restock_quantity(album_id)
+    return BusinessGenerationTools().recommend_restock_quantity(album_id)

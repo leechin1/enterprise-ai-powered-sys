@@ -19,7 +19,7 @@ from services.schemas.ba_agent_schemas import HealthAnalysisOutput
 from services.prompts import load_prompt
 
 # Import query tools
-from services.tools.business_query_tools import (
+from services.tools import (
     scan_business_metrics,
     get_top_performing_products,
     get_top_customers,

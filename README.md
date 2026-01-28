@@ -263,9 +263,10 @@ enterprise-ai-powered-sys/
 │   │   └── review_agent_schemas.py
 │   │
 │   ├── tools/                              # LangChain tool definitions
-│   │   ├── business_agent_tools.py
-│   │   ├── business_generation_tools.py
-│   │   └── business_query_tools.py
+│   │   ├── __init__.py                     # Package exports
+│   │   ├── base.py                         # BaseBusinessTools class
+│   │   ├── query_tools.py                  # Read-only query tools (11 tools)
+│   │   └── generation_tools.py             # Content generation tools (4 tools)
 │   │
 │   └── tools_templates/                    # Email/report templates
 │       ├── customer_email_template.txt
@@ -275,6 +276,7 @@ enterprise-ai-powered-sys/
 │
 └── utils/
     ├── __init__.py
+    ├── clients.py                          # ClientManager singleton for DB connections
     ├── database_schema.py                  # Schema documentation for LLMs
     └── db_analytics.py                     # Analytics query layer
 ```
@@ -286,7 +288,7 @@ enterprise-ai-powered-sys/
 - Luís Soeiro
 - Ishak Soltani
 
-## Brave License
+## bravedatum License
 
 MIT License
 

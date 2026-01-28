@@ -16,11 +16,17 @@ enterprise-ai-powered-sys/
 │   ├── prompts/                # LLM prompt templates
 │   ├── schemas/                # Pydantic response validation
 │   ├── tools/                  # LangChain tool definitions
+│   │   ├── __init__.py         # Package exports
+│   │   ├── base.py             # BaseBusinessTools class
+│   │   ├── query_tools.py      # Read-only query tools (11 tools)
+│   │   └── generation_tools.py # Content generation tools (4 tools)
+│   ├── tools_templates/        # Email/report templates
 │   ├── *_service.py            # Service implementations
 │   └── *_agent.py              # AI agent implementations
 ├── auth/
 │   └── auth_service.py         # Authentication logic
 ├── utils/
+│   ├── clients.py              # ClientManager singleton for DB connections
 │   ├── db_analytics.py         # Analytics query layer
 │   └── database_schema.py      # Schema documentation for LLMs
 ├── db_configure/
@@ -58,6 +64,30 @@ enterprise-ai-powered-sys/
 **Rationale**: LangChain provides a standardized abstraction for LLM orchestration, tool binding, and conversation memory. Separating tools into query (read-only) and generation (write) categories enforces clear boundaries. Agent architecture supports complex multi-step reasoning without custom state management.
 
 **Trade-offs**: LangChain adds abstraction overhead. Justified by reduced development time and maintainability for multi-agent workflows.
+
+### 3.1 Centralized Client Management
+
+**Decision**: Use singleton pattern (`ClientManager`) for database connections shared across all tools.
+
+**Rationale**: Eliminates redundant connection initialization. Each tool class was previously creating its own Supabase client and AnalyticsConnector instance. Centralized management reduces memory footprint, ensures consistent connection configuration, and simplifies testing via `ClientManager.reset()`.
+
+**Implementation**:
+```python
+from utils.clients import ClientManager
+
+class BaseBusinessTools:
+    def __init__(self):
+        self.analytics = ClientManager.get_analytics()
+        self.supabase = ClientManager.get_supabase()
+```
+
+### 3.2 Tool Class Inheritance
+
+**Decision**: All tool classes inherit from `BaseBusinessTools` which handles client initialization.
+
+**Rationale**: DRY principle - shared initialization code lives in one place. `BusinessQueryTools` (11 read-only methods) and `BusinessGenerationTools` (4 write methods) both inherit common setup. Clean import path: `from services.tools import scan_business_metrics`.
+
+**Trade-offs**: Slight indirection. Justified by 60% code reduction in tools layer.
 
 ### 4. Google Vertex AI / Gemini Models
 
@@ -113,6 +143,15 @@ enterprise-ai-powered-sys/
 | `email_service.py` | Email dispatch | EmailJS API |
 | `activity_log_service.py` | Activity persistence | Supabase |
 
+### Tools Layer
+
+| Module | Function | Tool Count |
+|--------|----------|------------|
+| `tools/query_tools.py` | Read-only analytics (metrics, top products, payments) | 11 |
+| `tools/generation_tools.py` | Content generation (emails, recommendations, actions) | 4 |
+| `tools/base.py` | Shared initialization via ClientManager | - |
+| `utils/clients.py` | Singleton Supabase/Analytics connections | - |
+
 ### Data Layer
 
 | Table Category | Tables |
@@ -141,7 +180,8 @@ Component -> AnalyticsConnector -> Supabase REST API
 
 ```
 User Input -> LangChain Agent -> Tool Selection
-           -> business_query_tools.py (data retrieval)
+           -> services.tools (query_tools / generation_tools)
+           -> ClientManager.get_supabase() (singleton connection)
            -> Gemini inference -> Pydantic validation -> Response
 ```
 
@@ -183,6 +223,7 @@ Query -> text-embedding-004 -> Supabase vector search
 
 - **Stateless Design**: Streamlit session state is per-user; horizontal scaling supported via Streamlit Cloud
 - **Database**: Supabase managed scaling; connection pooling handled by SDK
+- **Connection Management**: `ClientManager` singleton ensures single Supabase connection per process, reducing connection overhead
 - **LLM Calls**: Vertex AI rate limits apply; implement retry logic in production
 - **Embedding Storage**: Supabase pgvector scales with database tier
 

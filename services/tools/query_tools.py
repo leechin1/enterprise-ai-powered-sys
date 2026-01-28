@@ -1,31 +1,18 @@
 """
 Business Query Tools
-Read-only analytics and querying tools for the AI Business Consultant Agent
+Read-only analytics and querying tools for the AI Business Consultant Agent.
 """
 
-import os
-from typing import Dict, Any, List, Optional
-from dotenv import load_dotenv
-from supabase import create_client, Client
-from utils.db_analytics import AnalyticsConnector
-
-load_dotenv()
+from .base import BaseBusinessTools
 
 
-class BusinessQueryTools:
-    """Tools for querying and analyzing business data (read-only)"""
-
-    def __init__(self):
-        self.analytics = AnalyticsConnector()
-        # Initialize Supabase client for queries
-        supabase_url = os.getenv('SUPABASE_URL')
-        supabase_key = os.getenv('SUPABASE_SECRET_KEY')
-        self.supabase_client: Client = create_client(supabase_url, supabase_key)
+class BusinessQueryTools(BaseBusinessTools):
+    """Tools for querying and analyzing business data (read-only)."""
 
     def scan_business_metrics(self) -> str:
         """
         Scan and retrieve all key business metrics from the database.
-        Returns a comprehensive summary of financial, customer, inventory, and product data.
+        Returns a comprehensive summary of financial, customer, inventory, and payment data.
         """
         try:
             metrics = {
@@ -49,7 +36,6 @@ class BusinessQueryTools:
                 }
             }
 
-            # Format as readable string for the LLM
             summary = f"""
 BUSINESS METRICS SUMMARY:
 
@@ -154,7 +140,7 @@ PAYMENTS:
     def get_failed_payments(self) -> str:
         """Get all failed payment transactions that need attention."""
         try:
-            result = self.supabase_client.table('payments').select(
+            result = self.supabase.table('payments').select(
                 'payment_id, order_id, amount, payment_method, transaction_id, created_at'
             ).eq('status', 'failed').execute()
 
@@ -177,7 +163,7 @@ PAYMENTS:
     def get_pending_payments(self) -> str:
         """Get all pending payment transactions."""
         try:
-            result = self.supabase_client.table('payments').select(
+            result = self.supabase.table('payments').select(
                 'payment_id, order_id, amount, payment_method, transaction_id, created_at'
             ).eq('status', 'pending').execute()
 
@@ -298,65 +284,54 @@ PAYMENTS:
 # Tool function wrappers for LangChain
 def scan_business_metrics() -> str:
     """Scan and retrieve all key business metrics from the database."""
-    tools = BusinessQueryTools()
-    return tools.scan_business_metrics()
+    return BusinessQueryTools().scan_business_metrics()
 
 
 def get_top_performing_products(limit: int = 5) -> str:
     """Get top-selling albums with revenue and units sold data."""
-    tools = BusinessQueryTools()
-    return tools.get_top_performing_products(limit)
+    return BusinessQueryTools().get_top_performing_products(limit)
 
 
 def get_top_customers(limit: int = 5) -> str:
     """Get top customers by total spending."""
-    tools = BusinessQueryTools()
-    return tools.get_top_customers(limit)
+    return BusinessQueryTools().get_top_customers(limit)
 
 
 def get_low_stock_items(threshold: int = 10) -> str:
     """Get albums with low inventory levels."""
-    tools = BusinessQueryTools()
-    return tools.get_low_stock_items(threshold)
+    return BusinessQueryTools().get_low_stock_items(threshold)
 
 
 def get_failed_payments() -> str:
     """Get all failed payment transactions that need attention."""
-    tools = BusinessQueryTools()
-    return tools.get_failed_payments()
+    return BusinessQueryTools().get_failed_payments()
 
 
 def get_pending_payments() -> str:
     """Get all pending payment transactions."""
-    tools = BusinessQueryTools()
-    return tools.get_pending_payments()
+    return BusinessQueryTools().get_pending_payments()
 
 
 def get_genre_performance() -> str:
     """Get sales performance by genre."""
-    tools = BusinessQueryTools()
-    return tools.get_genre_performance()
+    return BusinessQueryTools().get_genre_performance()
 
 
 def get_label_performance() -> str:
     """Get sales performance by record label."""
-    tools = BusinessQueryTools()
-    return tools.get_label_performance()
+    return BusinessQueryTools().get_label_performance()
 
 
 def get_top_rated_albums(limit: int = 5) -> str:
     """Get top-rated albums with minimum review count."""
-    tools = BusinessQueryTools()
-    return tools.get_top_rated_albums(limit)
+    return BusinessQueryTools().get_top_rated_albums(limit)
 
 
 def get_payment_method_distribution() -> str:
     """Get distribution of payment methods used."""
-    tools = BusinessQueryTools()
-    return tools.get_payment_method_distribution()
+    return BusinessQueryTools().get_payment_method_distribution()
 
 
 def get_revenue_by_date() -> str:
     """Get daily revenue breakdown."""
-    tools = BusinessQueryTools()
-    return tools.get_revenue_by_date()
+    return BusinessQueryTools().get_revenue_by_date()

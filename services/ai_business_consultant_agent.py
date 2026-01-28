@@ -24,8 +24,9 @@ from services.schemas.ba_agent_schemas import (
 )
 from services.prompts import load_prompt
 
-# Import query tools (read-only analytics)
-from services.tools.business_query_tools import (
+# Import tools
+from services.tools import (
+    # Query tools (read-only analytics)
     scan_business_metrics,
     get_top_performing_products,
     get_top_customers,
@@ -37,10 +38,7 @@ from services.tools.business_query_tools import (
     get_top_rated_albums,
     get_payment_method_distribution,
     get_revenue_by_date,
-)
-
-# Import generation tools (content generation & actions)
-from services.tools.business_generation_tools import (
+    # Generation tools (content generation & actions)
     generate_customer_email,
     generate_inventory_alert_email,
     cancel_transaction,
