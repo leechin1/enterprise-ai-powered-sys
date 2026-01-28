@@ -8,30 +8,18 @@ import os
 
 # --- 1. SECRETS INJECTION (MUST BE FIRST) ---
 # This allows your existing components to use os.getenv() successfully
-for section_name in st.secrets:
-    section = st.secrets[section_name]
-    if isinstance(section, (dict, st.runtime.secrets.AttrDict)):
-        for key, value in section.items():
-            os.environ[key] = str(value)
-    else:
-        os.environ[section_name] = str(section)
-
-st.title("Debug Mode")
-st.write("If you see this, the server is running!")
-
-# Test if secrets are working
 try:
-    st.write("EmailJS Key Found:", "emailjs" in st.secrets)
-    st.write("GCP ID Found:", "gcp" in st.secrets)
-except Exception as e:
-    st.error(f"Secrets Error: {e}")
-
-# Test if the folder structure is recognized
-try:
-    from frontend.components import authentication
-    st.success("Folder structure is OK!")
-except Exception as e:
-    st.error(f"Import Error: {e}")
+    if len(st.secrets) > 0:
+        for section_name in st.secrets:
+            section = st.secrets[section_name]
+            if isinstance(section, (dict, st.runtime.secrets.AttrDict)):
+                for key, value in section.items():
+                    os.environ[key] = str(value)
+            else:
+                os.environ[section_name] = str(section)
+except FileNotFoundError:
+    st.error("⚠️ Secrets not configured. Please add secrets in Streamlit Cloud dashboard.")
+    st.stop()
 
 
 # --- 2. PAGE CONFIGURATION ---
