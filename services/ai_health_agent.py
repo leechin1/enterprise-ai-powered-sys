@@ -35,6 +35,10 @@ from services.tools import (
 
 load_dotenv()
 
+# Setup GCP credentials for non-GCP environments (e.g., Heroku, Railway)
+from utils.clients import setup_gcp_credentials
+setup_gcp_credentials()
+
 MODEL = os.getenv('VERTEX_MODEL')
 PROJECT_ID = os.getenv('GCP_PROJECT_ID')
 LOCATION = os.getenv('GCP_LOCATION', 'us-central1')

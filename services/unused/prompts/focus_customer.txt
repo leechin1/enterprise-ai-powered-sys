@@ -1,7 +1,0 @@
-Consultation Request - Customer Focus
-Analyze customer metrics and provide:
-1. Customer satisfaction assessment based on ratings
-2. VIP customer retention strategies
-3. Customer acquisition recommendations
-4. Review generation tactics
-5. Customer lifetime value optimization
