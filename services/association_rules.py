@@ -1,175 +1,151 @@
-"""
-AI Business Health Analysis Agent
-Analyzes overall business health and provides key insights
-Separated from issues analysis for focused health monitoring
-"""
+from typing import List, Dict, Any
+import pandas as pd
+from mlxtend.preprocessing import TransactionEncoder
+from mlxtend.frequent_patterns import apriori, association_rules
 
-import os
-import logging
-from typing import Dict, Any
-from dotenv import load_dotenv
-from langchain_google_vertexai import ChatVertexAI
-from langchain.agents import create_agent
-from langfuse import observe
-import json
-import re
+class AssociationRuleRecommender:
+    
+    """ Association Rule-based Recommender System. It uses the Apriori algorithm
+     for frequent itemset mining and generates association rules ranked by confidence and lift.
+        
+    Attributes:
+        min_support (float): Minimum support threshold.
+        min_confidence (float): Minimum confidence threshold.
+        encoder (TransactionEncoder | None): One-hot encoder fitted to baskets.
+        itemsets (pd.DataFrame | None): Frequent itemsets mined.
+        rules_df (pd.DataFrame | None): DataFrame of association rules (sorted by lift & confidence).
+        rules (List[Dict[str, Any]]): JSON-friendly list of rules.
+    """
 
-# Import Pydantic schemas
-from services.schemas.ba_agent_schemas import HealthAnalysisOutput
-from services.prompts import load_prompt
+    def __init__(self, min_support: float = 0.02, min_confidence: float = 0.3):
+        self.min_support = min_support
+        self.min_confidence = min_confidence
+        self.encoder = None
+        self.itemsets = None
+        self.rules_df = None
+        self.rules = []
 
-# Import query tools
-from services.tools import (
-    scan_business_metrics,
-    get_top_performing_products,
-    get_top_customers,
-    get_low_stock_items,
-    get_failed_payments,
-    get_pending_payments,
-    get_genre_performance,
-    get_label_performance,
-    get_top_rated_albums,
-    get_payment_method_distribution,
-    get_revenue_by_date,
-)
-
-load_dotenv()
-
-# Setup GCP credentials for non-GCP environments (e.g., Heroku, Railway)
-from utils.clients import setup_gcp_credentials
-setup_gcp_credentials()
-
-MODEL = os.getenv('VERTEX_MODEL')
-PROJECT_ID = os.getenv('GCP_PROJECT_ID')
-LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
-
-# Silence OpenTelemetry (Langfuse) errors
-logging.getLogger("opentelemetry.sdk._shared_internal").setLevel(logging.CRITICAL)
-
-
-class AIHealthAgent:
-    """AI agent for analyzing overall business health"""
-
-    def __init__(self):
-        # Initialize Vertex AI model (uses GCP credits)
-        self.llm = ChatVertexAI(
-            model=MODEL,
-            project=PROJECT_ID,
-            location=LOCATION,
-            temperature=0.7,
-        )
-
-        # Define available tools
-        self.tools = [
-            scan_business_metrics,
-            get_top_performing_products,
-            get_top_customers,
-            get_low_stock_items,
-            get_failed_payments,
-            get_pending_payments,
-            get_genre_performance,
-            get_label_performance,
-            get_top_rated_albums,
-            get_payment_method_distribution,
-            get_revenue_by_date,
-        ]
-
-        # Load system prompt from file
-        self.system_prompt = load_prompt('health_analysis_system_prompt.txt')
-
-        # Create agent
-        self.health_agent = create_agent(
-            self.llm,
-            tools=self.tools,
-            system_prompt=self.system_prompt
-        )
-
-    def _extract_and_validate_json(
-        self,
-        response_text: str,
-        schema_class
-    ) -> Dict[str, Any]:
-        """Extract and validate JSON from agent response"""
-        try:
-            # Try to extract JSON from code blocks
-            json_pattern = r'```(?:json)?\s*\n?(.*?)\n?```'
-            json_match = re.search(json_pattern, response_text, re.DOTALL)
-
-            if json_match:
-                json_str = json_match.group(1).strip()
-            else:
-                # Try to find JSON object directly
-                json_str = response_text.strip()
-
-            # Parse JSON
-            data = json.loads(json_str)
-
-            # Validate with Pydantic
-            validated = schema_class(**data)
-            return validated.model_dump()
-
-        except Exception as e:
-            print(f"JSON extraction/validation error: {e}")
-            print(f"Response text: {response_text[:500]}")
-            return None
-
-    @observe()
-    def analyze_business_health(self) -> Dict[str, Any]:
+    # ----- Pipeline -----
+    
+    def fit(self, baskets: List[List[str]]):
         """
-        Analyze overall business health and generate 6 key insights
-
-        Returns:
-            Dictionary with insights and metadata
+        Fit the recommender to the given baskets.
         """
-        try:
-            # Invoke the agent
-            result = self.health_agent.invoke({
-                "messages": [("user", "Analyze the overall business health of Misty Jazz Records. Use the available tools to gather data and provide exactly 6 key insights.")]
+        df = self._baskets_to_dataframe(baskets)
+        self.itemsets = self._mine_frequent_itemsets(df)
+        self.rules_df = self._generate_association_rules(self.itemsets)
+        self.rules = self._rules_to_records(self.rules_df)
+
+    def get_rules(self) -> List[Dict[str, Any]]:
+        """
+        Return mined rules in JSON-friendly format.
+        """
+        return self.rules
+
+    # ----- Recommendation methods -----
+    
+    def recommend_for_item(self, item: str, top_n: int = 5) -> List[str]:
+        """
+        Recommend items based on a single antecedent item.
+        Returns top_n consequents sorted by lift.
+        """
+        if self.rules_df is None or self.rules_df.empty:
+            return []
+
+        # Filter rules where item is in antecedent (vectorized)
+        filtered = self.rules_df[self.rules_df['antecedents'].apply(lambda x: item in x)]
+        
+        # Flatten all consequents except the item
+        recommendations = pd.Series([c for conseq in filtered['consequents'] for c in conseq if c != item])
+        
+        # Keep unique top_n while preserving order
+        recommendations = recommendations.drop_duplicates().head(top_n)
+        return recommendations.tolist()
+
+    def recommend_for_basket(self, basket: List[str], top_n: int = 5) -> List[str]:
+        """
+        Recommend items based on a basket of items.
+        Finds rules whose antecedent is a subset of the basket.
+        Returns top_n consequents sorted by lift.
+        """
+        if self.rules_df is None or self.rules_df.empty:
+            return []
+
+        basket_set = set(basket)
+        # Filter rules where antecedent is subset of basket
+        filtered = self.rules_df[self.rules_df['antecedents'].apply(lambda x: set(x).issubset(basket_set))]
+
+        # Flatten consequents excluding items already in basket
+        recommendations = pd.Series([
+            c for conseq in filtered['consequents'] for c in conseq
+            if c not in basket_set
+        ])
+        # Keep unique top_n
+        recommendations = recommendations.drop_duplicates().head(top_n)
+        return recommendations.tolist()
+
+    # ----- Internal helpers -----
+    
+    def _baskets_to_dataframe(self, baskets: List[List[str]]) -> pd.DataFrame:
+        """
+        Convert baskets to one-hot encoded DataFrame.
+        Reuse encoder if already fitted to avoid recomputation.
+        """
+        if self.encoder is None:
+            self.encoder = TransactionEncoder()
+            encoded_array = self.encoder.fit(baskets).transform(baskets)
+        else:
+            # Transform using existing encoder
+            encoded_array = self.encoder.transform(baskets)
+        return pd.DataFrame(encoded_array, columns=self.encoder.columns_)
+
+    def _mine_frequent_itemsets(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Mine frequent itemsets using Apriori.
+        """
+        return apriori(df, min_support=self.min_support, use_colnames=True)
+
+    def _generate_association_rules(self, itemsets: pd.DataFrame) -> pd.DataFrame:
+        """
+        Generate association rules and sort once by lift & confidence.
+        """
+        rules = association_rules(itemsets, metric="confidence", min_threshold=self.min_confidence)
+        if not rules.empty:
+            rules = rules.sort_values(by=["lift", "confidence"], ascending=False).reset_index(drop=True)
+        return rules
+
+    def _rules_to_records(self, rules_df: pd.DataFrame) -> List[Dict[str, Any]]:
+        """
+        Convert rules DataFrame to a JSON-friendly list of dictionaries.
+        """
+        records = []
+        for _, row in rules_df.iterrows():
+            records.append({
+                "antecedent": list(row["antecedents"]),
+                "consequent": list(row["consequents"]),
+                "support": float(row["support"]),
+                "confidence": float(row["confidence"]),
+                "lift": float(row["lift"]),
+                "leverage": float(row["leverage"]),
+                "conviction": float(row["conviction"]),
             })
+        return records
 
-            # Extract and validate response
-            last_message = result["messages"][-1]
-            if hasattr(last_message, 'content'):
-                agent_response = last_message.content
-            elif isinstance(last_message, dict):
-                agent_response = last_message.get('content', str(last_message))
-            else:
-                agent_response = str(last_message)
 
-            # Handle case where content is a list
-            if isinstance(agent_response, list):
-                agent_response = ' '.join([
-                    item.get('text', str(item)) if isinstance(item, dict) else str(item)
-                    for item in agent_response
-                ])
+baskets = [
+    ["milk", "bread", "butter"],
+    ["bread", "butter"],
+    ["milk", "bread"],
+    ["milk", "bread", "butter", "eggs"],
+    ["bread", "eggs"],
+    ["milk", "eggs"],
+]
 
-            # Use helper to extract and validate JSON
-            insights_data = self._extract_and_validate_json(agent_response, HealthAnalysisOutput)
+# Create recommender with low support/confidence to see some rules
+recommender = AssociationRuleRecommender(min_support=0.3, min_confidence=0.5)
+recommender.fit(baskets)
 
-            # Fallback if validation failed
-            if not insights_data or 'insights' not in insights_data:
-                insights_data = {
-                    "insights": [
-                        {
-                            "title": "Analysis Complete",
-                            "content": str(agent_response)[:200] if agent_response else "No response",
-                            "priority": "medium",
-                            "metric_type": "overall"
-                        }
-                    ]
-                }
+rules = recommender.get_rules()
+for r in rules:
+    print(r)
 
-            return {
-                "success": True,
-                "type": "health_analysis",
-                "data": insights_data,
-                "raw_response": agent_response,
-                "model": MODEL
-            }
-
-        except Exception as e:
-            return {
-                "success": False,
-                "type": "health_analysis",
-                "error": str(e)
-            }
