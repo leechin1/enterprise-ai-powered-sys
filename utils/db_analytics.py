@@ -4,6 +4,7 @@ Database analytics utilities for fetching real-time data from Supabase
 
 import os
 from typing import List, Dict, Any, Optional
+from collections import Counter
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import pandas as pd
@@ -867,3 +868,209 @@ class AnalyticsConnector:
         except Exception as e:
             print(f"Error listing queries: {e}")
             return pd.DataFrame()
+        
+
+
+    # ============ RECOMMENDER DATA EXTRACTION (ENHANCED) ============
+
+    def get_order_baskets(
+        self,
+        min_items_per_basket: int = 2,
+        min_item_frequency: int = 2,
+        use_album_title: bool = True,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> List[List[str]]:
+        
+        """
+        Build transaction baskets grouped by order.
+        Each basket represents a single order and contains
+        the unique albums purchased together in that order.
+
+        Processing steps:
+        - Deduplicates albums within each order
+        - Sorts items deterministically for reproducibility
+        - Filters orders by order_date (start_date / end_date)
+        - Removes infrequent albums based on global occurrence
+        - Discards baskets that become too small after filtering
+
+        Args:
+            min_items_per_basket: Minimum number of unique albums required
+                for an order to be kept as a basket.
+            min_item_frequency: Minimum number of baskets an album must
+                appear in globally to be retained.
+            use_album_title: If True, uses album titles as basket items;
+                otherwise uses album IDs.
+            start_date: Optional lower bound (inclusive) for order_date
+                filtering (e.g. '2024-01-01').
+            end_date: Optional upper bound (inclusive) for order_date
+                filtering (e.g. '2024-12-31').
+
+        Returns:
+            A list of baskets, where each basket is a sorted list of albums
+            purchased together in the same order.
+        """
+
+        query = self.client.table('orders').select(
+            'order_id, order_date, order_items(album_id, albums(title))'
+        )
+
+        if start_date:
+            query = query.gte('order_date', start_date)
+
+        if end_date:
+            query = query.lte('order_date', end_date)
+
+        result = query.execute()
+
+        if not result.data:
+            return []
+
+        baskets: Dict[str, set] = {}
+
+        for order in result.data:
+            order_id = order['order_id']
+            items = order.get('order_items', [])
+
+            if not items:
+                continue
+
+            baskets[order_id] = set()
+
+            for item in items:
+                album = item.get('albums')
+                if not album:
+                    continue
+
+                value = album['title'] if use_album_title else item['album_id']
+                baskets[order_id].add(value)
+
+        # Convert to list + filter by basket size
+        basket_lists = [
+            sorted(list(items))
+            for items in baskets.values()
+            if len(items) >= min_items_per_basket
+        ]
+
+        # Global item frequency filtering
+        item_counts = Counter(item for basket in basket_lists for item in basket)
+        frequent_items = {
+            item for item, count in item_counts.items()
+            if count >= min_item_frequency
+        }
+
+        filtered_baskets = [
+            sorted([item for item in basket if item in frequent_items])
+            for basket in basket_lists
+        ]
+
+        # Final cleanup: remove baskets that became too small
+        return [
+            basket for basket in filtered_baskets
+            if len(basket) >= min_items_per_basket
+        ]
+
+
+    def get_customer_baskets(
+        self,
+        min_items_per_customer: int = 2,
+        min_item_frequency: int = 2,
+        use_album_title: bool = True,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> Dict[str, List[str]]:
+        
+        """
+        Build purchase baskets grouped by customer, suitable for
+        customer-level preference modeling and recommendation systems.
+
+        Each basket represents a single customer and contains the unique
+        albums purchased by that customer across all their orders.
+
+        Processing steps:
+        - Deduplicates albums within each customer basket
+        - Sorts items deterministically for reproducibility
+        - Filters contributing orders by order_date (start_date / end_date)
+        - Removes infrequent albums based on global occurrence
+        - Discards customers with too few remaining items
+
+        Args:
+            min_items_per_customer: Minimum number of unique albums required
+                for a customer to be kept as a basket.
+            min_item_frequency: Minimum number of customer baskets an album
+                must appear in globally to be retained.
+            use_album_title: If True, uses album titles as basket items;
+                otherwise uses album IDs.
+            start_date: Optional lower bound (inclusive) for order_date
+                filtering (e.g. '2024-01-01').
+            end_date: Optional upper bound (inclusive) for order_date
+                filtering (e.g. '2024-12-31').
+
+        Returns:
+            A dictionary mapping customer_id to a sorted list of albums
+            purchased by that customer.
+        """
+
+        query = self.client.table('orders').select(
+            'customer_id, order_date, order_items(album_id, albums(title))'
+        )
+
+        if start_date:
+            query = query.gte('order_date', start_date)
+
+        if end_date:
+            query = query.lte('order_date', end_date)
+
+        result = query.execute()
+
+        if not result.data:
+            return {}
+
+        customer_baskets: Dict[str, set] = {}
+
+        for order in result.data:
+            customer_id = order.get('customer_id')
+            items = order.get('order_items', [])
+
+            if not customer_id or not items:
+                continue
+
+            if customer_id not in customer_baskets:
+                customer_baskets[customer_id] = set()
+
+            for item in items:
+                album = item.get('albums')
+                if not album:
+                    continue
+
+                value = album['title'] if use_album_title else item['album_id']
+                customer_baskets[customer_id].add(value)
+
+        # Convert to sorted lists
+        customer_lists = {
+            cid: sorted(list(items))
+            for cid, items in customer_baskets.items()
+            if len(items) >= min_items_per_customer
+        }
+
+        # Global item frequency filtering
+        item_counts = Counter(
+            item for items in customer_lists.values() for item in items
+        )
+
+        frequent_items = {
+            item for item, count in item_counts.items()
+            if count >= min_item_frequency
+        }
+
+        filtered_customers = {
+            cid: sorted([item for item in items if item in frequent_items])
+            for cid, items in customer_lists.items()
+        }
+
+        return {
+            cid: items
+            for cid, items in filtered_customers.items()
+            if len(items) >= min_items_per_customer
+        }
+
