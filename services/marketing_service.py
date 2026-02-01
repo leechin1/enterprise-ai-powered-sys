@@ -15,6 +15,10 @@ from datetime import datetime, timedelta
 import vertexai
 from vertexai.generative_models import GenerativeModel, GenerationConfig
 from langfuse import observe
+
+# Import centralized config
+from services.config import GCPConfig, ModelConfig, MarketingConfig
+
 from services.schemas.marketing_schemas import MarketingEmailOutput
 from services.prompts import load_system_instructions
 
@@ -23,10 +27,7 @@ load_dotenv()
 # Silence OpenTelemetry (Langfuse) errors
 logging.getLogger("opentelemetry.sdk._shared_internal").setLevel(logging.CRITICAL)
 
-# Vertex AI Configuration
-MODEL = os.getenv('VERTEX_MODEL')
-PROJECT_ID = os.getenv('GCP_PROJECT_ID')
-LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
+
 class MarketingService:
     """Handle marketing-specific queries and email generation"""
 
@@ -47,10 +48,10 @@ class MarketingService:
             self.client = create_client(supabase_url, supabase_key)
 
             # Initialize Vertex AI
-            if PROJECT_ID:
-                vertexai.init(project=PROJECT_ID, location=LOCATION)
+            if GCPConfig.PROJECT_ID:
+                vertexai.init(project=GCPConfig.PROJECT_ID, location=GCPConfig.LOCATION)
                 self.vertex_model = GenerativeModel(
-                    MODEL,
+                    GCPConfig.VERTEX_MODEL,
                     system_instruction=load_system_instructions('marketing_email_system_instructions.txt')
                 )
 
@@ -445,9 +446,9 @@ CRITICAL FORMATTING RULES:
         for attempt in range(max_retries):
             try:
                 generation_config = GenerationConfig(
-                    temperature=0.8,
-                    top_p=0.95,
-                    top_k=40,
+                    temperature=ModelConfig.get_temperature('marketing'),
+                    top_p=ModelConfig.DEFAULT_TOP_P,
+                    top_k=ModelConfig.DEFAULT_TOP_K,
                 )
 
                 response = self.vertex_model.generate_content(

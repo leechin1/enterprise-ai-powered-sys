@@ -160,3 +160,55 @@ class FixesOutput(BaseModel):
         min_length=1,
         max_length=10
     )
+
+
+# ============ CONVERSATIONAL AGENT SCHEMAS ============
+
+class ConversationMessage(BaseModel):
+    """A single message in the conversation history"""
+    role: Literal["user", "assistant", "system"] = Field(..., description="Role of the message sender")
+    content: str = Field(..., description="Message content")
+    timestamp: str = Field(default="", description="ISO timestamp of message")
+    source: str = Field(default="", description="Source of the action/reasoning for assistant messages")
+    tool_calls: List[str] = Field(default_factory=list, description="List of tools called for this response")
+    data: dict = Field(default_factory=dict, description="Any associated data (query results, issues, etc.)")
+
+
+class AgentAction(BaseModel):
+    """An action the agent can take"""
+    action_type: Literal[
+        "generate_queries", "execute_queries", "identify_issues",
+        "propose_fix", "ask_clarification", "provide_summary",
+        "request_user_choice", "complete_workflow"
+    ] = Field(..., description="Type of action being taken")
+    action_description: str = Field(..., description="Human-readable description of what the agent is doing")
+    reasoning: str = Field(..., description="Why the agent is taking this action")
+    requires_user_input: bool = Field(default=False, description="Whether this action requires user response")
+
+
+class AgentResponse(BaseModel):
+    """Complete response from the conversational agent"""
+    message: str = Field(..., description="The assistant's response message to display")
+    action: AgentAction = Field(..., description="The action being taken")
+    options: List[str] = Field(default_factory=list, description="Options to present to user if requires_user_input")
+    data: dict = Field(default_factory=dict, description="Any data associated with this response")
+    source_reasoning: str = Field(..., description="Source and reasoning for this response")
+    next_steps: List[str] = Field(default_factory=list, description="What the agent plans to do next")
+
+
+class ConversationState(BaseModel):
+    """Current state of the conversation workflow"""
+    stage: Literal[
+        "initial", "awaiting_generation_choice", "awaiting_focus_areas",
+        "generating_queries", "queries_generated", "awaiting_query_approval",
+        "executing_queries", "queries_executed", "identifying_issues",
+        "issues_identified", "awaiting_fix_selection", "proposing_fix",
+        "fix_proposed", "editing_emails", "workflow_complete"
+    ] = Field(default="initial", description="Current stage of the workflow")
+    focus_areas: List[str] = Field(default_factory=list, description="User-specified areas to focus on")
+    generated_queries: List[dict] = Field(default_factory=list, description="Generated SQL queries")
+    query_results: List[dict] = Field(default_factory=list, description="Results from executed queries")
+    identified_issues: List[dict] = Field(default_factory=list, description="Identified business issues")
+    selected_issue_index: int = Field(default=-1, description="Index of issue selected for fix")
+    proposed_fixes: List[dict] = Field(default_factory=list, description="Proposed fixes")
+    editing_email_index: int = Field(default=-1, description="Index of email being edited")

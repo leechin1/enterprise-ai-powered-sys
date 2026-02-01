@@ -16,16 +16,10 @@ from google import genai
 from google.genai import types
 from langfuse import observe
 
-load_dotenv()
+# Import centralized config
+from services.config import GCPConfig, ModelConfig, RAGConfig
 
-# Configuration
-MODEL = os.getenv('VERTEX_MODEL', 'gemini-2.5-flash')
-PROJECT_ID = os.getenv('GCP_PROJECT_ID')
-LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
-EMBEDDING_MODEL = "text-embedding-004"
-CHUNK_SIZE = 1000  # Characters per chunk
-CHUNK_OVERLAP = 200  # Overlap between chunks
-EMBEDDING_DIMENSION = 768  # Google text-embedding-004 dimension
+load_dotenv()
 
 # Silence unnecessary logging
 logging.getLogger("opentelemetry.sdk._shared_internal").setLevel(logging.CRITICAL)
@@ -48,43 +42,37 @@ class RAGService:
 
         self.supabase: Client = create_client(supabase_url, supabase_key)
 
-        # Initialize GenAI client with Vertex AI
+        # Initialize GenAI client with Vertex AI using centralized config
         self.client = genai.Client(
             vertexai=True,
-            project=PROJECT_ID,
-            location=LOCATION
+            project=GCPConfig.PROJECT_ID,
+            location=GCPConfig.LOCATION
         )
 
-        # Model names
-        self.model_name = MODEL
-        self.embedding_model_name = EMBEDDING_MODEL
+        # Model names from centralized config
+        self.model_name = GCPConfig.VERTEX_MODEL
+        self.embedding_model_name = RAGConfig.EMBEDDING_MODEL
 
-        # System prompt for RAG chatbot
-        self.system_prompt = """You are a helpful AI assistant for Misty Jazz Records, a vinyl record store.
-You answer questions based ONLY on the provided context from the company's knowledge base.
+        # Load system prompt from file
+        from services.prompts import load_prompt
+        self.system_prompt = load_prompt('rag_chatbot_system_prompt.txt')
 
-STRICT RULES:
-1. ONLY use information from the CONTEXT provided - never make up information
-2. If the context contains relevant information, provide a detailed answer based on it
-3. If the context does NOT contain relevant information, say exactly: "I don't have information about that in my knowledge base."
-4. NEVER invent names, roles, or details not in the context
-5. NEVER suggest contacting specific people unless they are explicitly mentioned in the context
-6. Quote specific policies or procedures from the context when relevant
-
-Be concise but thorough. Maintain a professional, helpful tone."""
-
-    def _chunk_text(self, text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
+    def _chunk_text(self, text: str, chunk_size: int = None, overlap: int = None) -> List[str]:
         """
         Split text into overlapping chunks
 
         Args:
             text: Text to split
-            chunk_size: Maximum characters per chunk
-            overlap: Number of overlapping characters between chunks
+            chunk_size: Maximum characters per chunk (defaults to RAGConfig.CHUNK_SIZE)
+            overlap: Number of overlapping characters between chunks (defaults to RAGConfig.CHUNK_OVERLAP)
 
         Returns:
             List of text chunks
         """
+        # Use centralized config defaults
+        chunk_size = chunk_size or RAGConfig.CHUNK_SIZE
+        overlap = overlap or RAGConfig.CHUNK_OVERLAP
+
         if len(text) <= chunk_size:
             return [text]
 
@@ -385,8 +373,12 @@ Be concise but thorough. Maintain a professional, helpful tone."""
             Response dict with answer and sources
         """
         try:
-            # Search for relevant documents (lower threshold to catch more results)
-            relevant_docs = self.search_documents(query, match_count=5, match_threshold=0.3)
+            # Search for relevant documents using centralized config
+            relevant_docs = self.search_documents(
+                query,
+                match_count=RAGConfig.MATCH_COUNT,
+                match_threshold=RAGConfig.MATCH_THRESHOLD
+            )
 
             # Debug logging
             print(f"[RAG] Query: {query}")
@@ -422,15 +414,15 @@ Please provide a helpful, accurate answer based on the context provided. If the 
                 parts=[types.Part.from_text(text=user_message)]
             ))
 
-            # Generate response using GenAI SDK
+            # Generate response using GenAI SDK with centralized config
             response = self.client.models.generate_content(
                 model=self.model_name,
                 contents=contents,
                 config=types.GenerateContentConfig(
                     system_instruction=self.system_prompt,
-                    temperature=0.7,
-                    top_p=0.95,
-                    top_k=40,
+                    temperature=ModelConfig.get_temperature('rag'),
+                    top_p=ModelConfig.DEFAULT_TOP_P,
+                    top_k=ModelConfig.DEFAULT_TOP_K,
                 )
             )
 

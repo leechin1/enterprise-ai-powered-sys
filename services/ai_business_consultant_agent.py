@@ -4,7 +4,6 @@ Uses LangChain agent architecture with Gemini and custom tools
 Enhanced with Pydantic schemas for structured outputs
 """
 
-import os
 from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
 from langchain_google_vertexai import ChatVertexAI
@@ -14,6 +13,9 @@ from langfuse import observe
 import logging
 import json
 import re
+
+# Import centralized config
+from services.config import GCPConfig, ModelConfig
 
 # Import Pydantic schemas for structured outputs
 from services.schemas.ba_agent_schemas import (
@@ -51,10 +53,6 @@ load_dotenv()
 from utils.clients import setup_gcp_credentials
 setup_gcp_credentials()
 
-MODEL = os.getenv('VERTEX_MODEL')
-PROJECT_ID = os.getenv('GCP_PROJECT_ID')
-LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
-
 # Silence OpenTelemetry (Langfuse) errors
 logging.getLogger("opentelemetry.sdk._shared_internal").setLevel(logging.CRITICAL)
 
@@ -65,10 +63,10 @@ class AIBusinessConsultantAgent:
     def __init__(self):
         # Initialize Vertex AI model (uses GCP credits)
         self.llm = ChatVertexAI(
-            model=MODEL,
-            project=PROJECT_ID,
-            location=LOCATION,
-            temperature=0.7,
+            model=GCPConfig.VERTEX_MODEL,
+            project=GCPConfig.PROJECT_ID,
+            location=GCPConfig.LOCATION,
+            temperature=ModelConfig.get_temperature('business_consultant'),
         )
 
         # Define available tools
@@ -218,7 +216,7 @@ class AIBusinessConsultantAgent:
                 "type": "health_analysis",
                 "data": insights_data,
                 "raw_response": agent_response,
-                "model": MODEL
+                "model": GCPConfig.VERTEX_MODEL
             }
 
         except Exception as e:
@@ -280,7 +278,7 @@ class AIBusinessConsultantAgent:
                 "type": "issues_analysis",
                 "data": issues_data,
                 "raw_response": agent_response,
-                "model": MODEL
+                "model": GCPConfig.VERTEX_MODEL
             }
 
         except Exception as e:
@@ -351,7 +349,7 @@ class AIBusinessConsultantAgent:
                 "type": "recommendations",
                 "data": recommendations_data,
                 "raw_response": agent_response,
-                "model": MODEL
+                "model": GCPConfig.VERTEX_MODEL
             }
 
         except Exception as e:
@@ -422,7 +420,7 @@ class AIBusinessConsultantAgent:
                 "type": "fixes",
                 "data": fixes_data,
                 "raw_response": agent_response,
-                "model": MODEL
+                "model": GCPConfig.VERTEX_MODEL
             }
 
         except Exception as e:

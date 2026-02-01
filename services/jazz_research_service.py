@@ -3,7 +3,6 @@ Jazz Research Service - Web Search powered Jazz Domain Expert
 Uses Google GenAI SDK with Google Search tool for jazz-specific research
 """
 
-import os
 import logging
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
@@ -11,12 +10,11 @@ from google import genai
 from google.genai import types
 from langfuse import observe
 
-load_dotenv()
+# Import centralized config
+from services.config import GCPConfig, ModelConfig
+from services.prompts import load_prompt
 
-# Configuration
-MODEL = os.getenv('VERTEX_MODEL', 'gemini-2.5-flash')
-PROJECT_ID = os.getenv('GCP_PROJECT_ID')
-LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
+load_dotenv()
 
 # Silence unnecessary logging
 logging.getLogger("opentelemetry.sdk._shared_internal").setLevel(logging.CRITICAL)
@@ -29,48 +27,17 @@ class JazzResearchService:
     """
 
     def __init__(self):
-        # Initialize GenAI client with Vertex AI
+        # Initialize GenAI client with Vertex AI using centralized config
         self.client = genai.Client(
             vertexai=True,
-            project=PROJECT_ID,
-            location=LOCATION
+            project=GCPConfig.PROJECT_ID,
+            location=GCPConfig.LOCATION
         )
 
-        self.model_name = MODEL
+        self.model_name = GCPConfig.VERTEX_MODEL
 
-        # System prompt for Jazz Research
-        self.system_prompt = """You are a jazz music expert and historian for Misty Jazz Records, a premium vinyl record store.
-You specialize in providing accurate, detailed information about jazz music using web search.
-
-YOUR ROLE:
-- Answer questions ONLY about jazz music and related topics
-- Use Google Search to find accurate, up-to-date information
-- Provide rich, educational responses about jazz history, artists, albums, genres, and music theory
-
-JAZZ TOPICS YOU COVER:
-- Jazz History: Origins, evolution, major movements (New Orleans, Swing Era, Bebop, Cool Jazz, Hard Bop, Free Jazz, Fusion, Contemporary)
-- Artists & Musicians: Biographies, discographies, playing styles, influences, collaborations
-- Albums & Recordings: Classic albums, essential recordings, label information, recording sessions
-- Genres & Styles: Bebop, Cool Jazz, Hard Bop, Modal Jazz, Free Jazz, Jazz Fusion, Smooth Jazz, Latin Jazz, etc.
-- Music Theory: Jazz harmony, chord progressions, improvisation techniques, scales, composition
-- Record Labels: Blue Note, Prestige, Impulse!, Verve, ECM, Columbia, Atlantic, etc.
-- Instruments: Saxophone, trumpet, piano, double bass, drums, guitar in jazz context
-- Jazz Venues & History: Famous clubs, festivals, important performances
-
-STRICT RULES:
-1. ONLY answer questions related to jazz music and the jazz domain
-2. If a question is NOT about jazz, politely decline and redirect: "I specialize in jazz music research. Could you ask me something about jazz artists, albums, history, or music theory instead?"
-3. Always use Google Search to verify facts and provide accurate information
-4. When mentioning albums, include release year and record label when possible
-5. When discussing artists, mention their primary instrument and notable collaborators
-6. Be enthusiastic about jazz while maintaining accuracy
-7. Cite sources when providing specific facts or dates
-
-RESPONSE STYLE:
-- Be informative and educational
-- Use a warm, knowledgeable tone befitting a jazz expert
-- Structure longer responses with clear sections
-- Include interesting facts and context that jazz enthusiasts would appreciate"""
+        # Load system prompt from file
+        self.system_prompt = load_prompt('jazz_research_prompt.txt')
 
     @observe()
     def research(
@@ -112,15 +79,15 @@ RESPONSE STYLE:
                 google_search=types.GoogleSearch()
             )
 
-            # Generate response with Google Search
+            # Generate response with Google Search using centralized config
             response = self.client.models.generate_content(
                 model=self.model_name,
                 contents=contents,
                 config=types.GenerateContentConfig(
                     system_instruction=self.system_prompt,
-                    temperature=0.7,
-                    top_p=0.95,
-                    top_k=40,
+                    temperature=ModelConfig.get_temperature('jazz_research'),
+                    top_p=ModelConfig.DEFAULT_TOP_P,
+                    top_k=ModelConfig.DEFAULT_TOP_K,
                     tools=[google_search_tool],
                 )
             )

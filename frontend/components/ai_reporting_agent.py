@@ -15,6 +15,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from utils.db_analytics import AnalyticsConnector
 from services.ai_health_agent import AIHealthAgent
 from services.ai_issues_agent import AIIssuesAgent
+from services.ai_conversational_issues_agent import AIConversationalIssuesAgent
 
 # Import email and activity log services
 try:
@@ -141,8 +142,210 @@ def render_health_tab(health_agent):
 
 
 def render_issues_tab(issues_agent):
-    """Render the Issues & Problems tab with three-stage reasoning"""
+    """Render the Issues & Problems tab with conversational interface"""
     st.markdown("### ⚠️ Business Issues & Problems")
+
+    # Mode selector
+    mode = st.radio(
+        "Analysis Mode",
+        ["💬 Conversational (AI Assistant)", "📊 Classic (Three-Stage)"],
+        horizontal=True,
+        key="issues_analysis_mode",
+        help="Choose between guided AI conversation or traditional step-by-step analysis"
+    )
+
+    st.markdown("---")
+
+    if mode == "💬 Conversational (AI Assistant)":
+        render_conversational_issues_interface()
+    else:
+        render_classic_issues_interface(issues_agent)
+
+
+def render_conversational_issues_interface():
+    """Render the agentic conversational chat-based interface for issues analysis"""
+
+    st.caption("🤖 **Agentic AI Assistant** - I autonomously analyze, investigate, and resolve business issues")
+
+    # Initialize conversational agent
+    try:
+        conv_agent = AIConversationalIssuesAgent()
+    except Exception as e:
+        st.error(f"Failed to initialize conversational agent: {e}")
+        return
+
+    # Initialize session state for conversation
+    if 'conv_messages' not in st.session_state:
+        st.session_state.conv_messages = []
+
+    if 'conv_tools_used' not in st.session_state:
+        st.session_state.conv_tools_used = []
+
+    # Display initial suggestions if no conversation yet
+    if not st.session_state.conv_messages:
+        # Get greeting
+        greeting = conv_agent.get_greeting()
+
+        # Display greeting
+        with st.chat_message("assistant", avatar="🤖"):
+            st.markdown(greeting['response'])
+
+        # Show suggestion buttons
+        st.markdown("### 💡 Quick Start - Try These:")
+        suggestions = conv_agent.get_initial_suggestions()
+
+        # Display suggestions in a grid (3 per row)
+        for row_start in range(0, len(suggestions), 3):
+            row_suggestions = suggestions[row_start:row_start + 3]
+            cols = st.columns(len(row_suggestions))
+
+            for col_idx, suggestion in enumerate(row_suggestions):
+                with cols[col_idx]:
+                    if st.button(
+                        suggestion['label'],
+                        key=f"suggestion_{row_start + col_idx}",
+                        use_container_width=True,
+                        help=suggestion['description']
+                    ):
+                        # Process the suggestion query
+                        process_agentic_message(conv_agent, suggestion['query'])
+                        st.rerun()
+
+        st.markdown("---")
+
+    else:
+        # Display conversation history
+        for idx, msg in enumerate(st.session_state.conv_messages):
+            if msg['role'] == 'user':
+                with st.chat_message("user"):
+                    st.markdown(msg['content'])
+            else:
+                with st.chat_message("assistant", avatar="🤖"):
+                    st.markdown(msg['content'])
+
+                    # Show tools used if any
+                    tools = msg.get('tools_used', [])
+                    if tools:
+                        with st.expander(f"🔧 Tools Used ({len(tools)})", expanded=False):
+                            for tool in tools:
+                                st.markdown(f"- `{tool}`")
+
+    # Chat input - always visible
+    user_input = st.chat_input("Ask me anything about your business issues...")
+
+    if user_input:
+        process_agentic_message(conv_agent, user_input)
+        st.rerun()
+
+    # Sidebar with conversation controls and suggestions
+    with st.sidebar:
+        st.markdown("### 💬 Conversation Controls")
+
+        if st.button("🔄 Reset Conversation", use_container_width=True):
+            st.session_state.conv_messages = []
+            st.session_state.conv_tools_used = []
+            AIConversationalIssuesAgent.reset_state()
+            st.rerun()
+
+        if st.button("📊 Check Analysis Status", use_container_width=True):
+            process_agentic_message(conv_agent, "What's the current state of our analysis?")
+            st.rerun()
+
+        st.markdown("---")
+        st.markdown("### 💡 Quick Prompts")
+
+        quick_prompts = [
+            ("🔍 Full Analysis", "Run a complete business analysis"),
+            ("📦 Inventory Check", "Check for inventory issues"),
+            ("💳 Payment Issues", "Are there any payment problems?"),
+            ("🔧 Fix Issue #1", "Propose a fix for issue 1"),
+            ("📧 Send Emails", "Send the notification emails"),
+        ]
+
+        for label, prompt in quick_prompts:
+            if st.button(label, key=f"sidebar_{label}", use_container_width=True):
+                process_agentic_message(conv_agent, prompt)
+                st.rerun()
+
+        # Show tools used in this session
+        if st.session_state.conv_tools_used:
+            with st.expander("🔧 Tools Used This Session", expanded=False):
+                tool_counts = {}
+                for tool in st.session_state.conv_tools_used:
+                    tool_counts[tool] = tool_counts.get(tool, 0) + 1
+                for tool, count in sorted(tool_counts.items(), key=lambda x: -x[1]):
+                    st.markdown(f"- `{tool}`: {count}x")
+
+
+def process_agentic_message(conv_agent, user_input: str):
+    """Process a user message through the agentic conversational agent"""
+
+    # Add user message to history
+    st.session_state.conv_messages.append({
+        'role': 'user',
+        'content': user_input
+    })
+
+    # Log the user message
+    log_activity(
+        action_type="agentic_user_message",
+        description=f"User message in agentic interface",
+        category="ai_reporting",
+        metadata={
+            "message_preview": user_input[:100]
+        }
+    )
+
+    # Show processing indicator
+    with st.spinner("🤖 Agent is thinking and taking action..."):
+        try:
+            # Process through agentic agent
+            result = conv_agent.process_message(
+                user_input,
+                st.session_state.conv_messages[:-1]  # History without current message
+            )
+
+            # Add assistant response to history
+            st.session_state.conv_messages.append({
+                'role': 'assistant',
+                'content': result.get('response', 'I encountered an issue processing your request.'),
+                'tools_used': result.get('tools_used', []),
+                'tool_results': result.get('tool_results', [])
+            })
+
+            # Track tools used in session
+            tools_used = result.get('tools_used', [])
+            st.session_state.conv_tools_used.extend(tools_used)
+
+            # Log tools used
+            if tools_used:
+                log_activity(
+                    action_type="agentic_tools_used",
+                    description=f"Agentic agent used tools: {', '.join(tools_used)}",
+                    category="ai_reporting",
+                    metadata={
+                        "tools": tools_used,
+                        "success": result.get('success', False)
+                    }
+                )
+
+        except Exception as e:
+            st.session_state.conv_messages.append({
+                'role': 'assistant',
+                'content': f"❌ I encountered an error: {str(e)}\n\nPlease try again or reset the conversation.",
+                'tools_used': [],
+                'tool_results': []
+            })
+            log_activity(
+                action_type="agentic_error",
+                description=f"Agentic agent error: {str(e)}",
+                category="ai_reporting",
+                status="error"
+            )
+
+
+def render_classic_issues_interface(issues_agent):
+    """Render the classic three-stage issues analysis interface"""
     st.caption("Three-stage AI analysis: SQL Generation → Query Approval → Issue Identification → Fix Proposals")
 
     # Initialize analytics connector for saved queries
@@ -256,7 +459,7 @@ def render_issues_tab(issues_agent):
         display_issues_results(issues_result, issues_agent=issues_agent)
 
     elif not st.session_state.get('sql_queries_cache'):
-        st.info("👆 Click 'Stage 0: Generate SQL Queries' to start the three-stage analysis")
+        st.info("👆 Click 'Generate New Queries' to start the three-stage analysis")
         with st.expander("🔍 How It Works", expanded=False):
             st.markdown("""
             **Stage 0: SQL Query Generation**

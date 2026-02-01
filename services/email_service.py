@@ -4,27 +4,16 @@ Handles email sending with placebo mode for development/testing
 All emails are sent to the configured recipient but store the intended recipient in subject
 """
 
-import os
 import requests
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from dotenv import load_dotenv
 
+# Import centralized config
+from services.config import EmailConfig
+
 load_dotenv()
-
-# Configuration
-EMAILJS_SERVICE_ID = os.getenv('EMAILJS_SERVICE_ID')
-EMAILJS_TEMPLATE_ID = os.getenv('EMAILJS_TEMPLATE_ID')
-EMAILJS_PUBLIC_KEY = os.getenv('EMAILJS_PUBLIC_KEY')
-EMAILJS_PRIVATE_KEY = os.getenv('EMAILJS_PRIVATE_KEY')
-
-# Placebo mode - all emails go to this address
-PLACEBO_EMAIL = os.getenv('PLACEBO_EMAIL')  # Your personal email
-PLACEBO_MODE = os.getenv('PLACEBO_MODE', 'true').lower() == 'true'
-
-# EmailJS API endpoint - use v1.1 for server-side with private key
-EMAILJS_API_URL = "https://api.emailjs.com/api/v1.0/email/send"
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +26,15 @@ class EmailService:
     """
 
     def __init__(self):
-        self.service_id = EMAILJS_SERVICE_ID
-        self.template_id = EMAILJS_TEMPLATE_ID
-        self.public_key = EMAILJS_PUBLIC_KEY
-        self.private_key = EMAILJS_PRIVATE_KEY
-        self.placebo_email = PLACEBO_EMAIL
-        self.placebo_mode = PLACEBO_MODE
+        # Use centralized config
+        self.service_id = EmailConfig.SERVICE_ID
+        self.template_id = EmailConfig.TEMPLATE_ID
+        self.public_key = EmailConfig.PUBLIC_KEY
+        self.private_key = EmailConfig.PRIVATE_KEY
+        self.placebo_email = EmailConfig.PLACEBO_EMAIL
+        self.placebo_mode = EmailConfig.PLACEBO_MODE
+        self.api_url = EmailConfig.API_URL
+        self.request_timeout = EmailConfig.REQUEST_TIMEOUT
 
         # Validate configuration
         self._validate_config()
@@ -134,15 +126,15 @@ class EmailService:
             # Headers for server-side API call
             headers = {
                 "Content-Type": "application/json",
-                "origin": "http://localhost"  # Required for CORS
+                "origin": EmailConfig.CORS_ORIGIN  # Required for CORS
             }
 
-            # Send the request
+            # Send the request using centralized config
             response = requests.post(
-                EMAILJS_API_URL,
+                self.api_url,
                 json=payload,
                 headers=headers,
-                timeout=30
+                timeout=self.request_timeout
             )
 
             if response.status_code == 200:

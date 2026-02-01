@@ -17,6 +17,10 @@ from textblob import TextBlob
 import vertexai
 from vertexai.generative_models import GenerativeModel, GenerationConfig
 from langfuse import observe
+
+# Import centralized config
+from services.config import GCPConfig, ModelConfig, ReviewResponseConfig
+
 from services.schemas.review_agent_schemas import ReviewResponseOutput
 from services.prompts import load_system_instructions
 
@@ -25,18 +29,16 @@ load_dotenv()
 # Silence OpenTelemetry (Langfuse) errors
 logging.getLogger("opentelemetry.sdk._shared_internal").setLevel(logging.CRITICAL)
 
-MODEL = os.getenv('VERTEX_MODEL')
-PROJECT_ID = os.getenv('GCP_PROJECT_ID')
-LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
+
 class AIReviewResponseAgent:
     """AI agent for analyzing reviews and generating appropriate responses"""
 
-    # Sentiment thresholds - REINFORCED for clear classification
-    SENTIMENT_POSITIVE_THRESHOLD = 0.15  # Increased from 0.1 to reduce false positives
-    SENTIMENT_NEGATIVE_THRESHOLD = -0.15  # Decreased from -0.1 to be more strict
-    STAR_HIGH_THRESHOLD = 4  # 4-5 stars = high
-    STAR_MEDIUM_THRESHOLD = 3  # Exactly 3 stars = medium
-    STAR_LOW_THRESHOLD = 2  # 1-2 stars = low  
+    # Sentiment thresholds from centralized config
+    SENTIMENT_POSITIVE_THRESHOLD = ReviewResponseConfig.SENTIMENT_POSITIVE_THRESHOLD
+    SENTIMENT_NEGATIVE_THRESHOLD = ReviewResponseConfig.SENTIMENT_NEGATIVE_THRESHOLD
+    STAR_HIGH_THRESHOLD = ReviewResponseConfig.STAR_HIGH_THRESHOLD
+    STAR_MEDIUM_THRESHOLD = ReviewResponseConfig.STAR_MEDIUM_THRESHOLD
+    STAR_LOW_THRESHOLD = ReviewResponseConfig.STAR_LOW_THRESHOLD
 
     def __init__(self):
         self.client: Optional[Client] = None
@@ -55,10 +57,10 @@ class AIReviewResponseAgent:
             self.client = create_client(supabase_url, supabase_key)
 
             # Initialize Vertex AI (uses GCP credits)
-            if PROJECT_ID:
-                vertexai.init(project=PROJECT_ID, location=LOCATION)
+            if GCPConfig.PROJECT_ID:
+                vertexai.init(project=GCPConfig.PROJECT_ID, location=GCPConfig.LOCATION)
                 self.vertex_model = GenerativeModel(
-                    MODEL,
+                    GCPConfig.VERTEX_MODEL,
                     system_instruction=load_system_instructions('review_response_system_instructions.txt')
                 )
 
@@ -319,16 +321,16 @@ CRITICAL FORMATTING RULES:
 """
 
         # Retry logic with validation
-        max_retries = 3
+        max_retries = ReviewResponseConfig.MAX_RETRIES
         last_error = None
 
         for attempt in range(max_retries):
             try:
-                # Use Vertex AI GenerationConfig
+                # Use Vertex AI GenerationConfig with centralized settings
                 generation_config = GenerationConfig(
-                    temperature=0.7,
-                    top_p=0.9,
-                    top_k=40,
+                    temperature=ModelConfig.get_temperature('review_response'),
+                    top_p=ModelConfig.DEFAULT_TOP_P,
+                    top_k=ModelConfig.DEFAULT_TOP_K,
                 )
 
                 # Generate content using Vertex AI model
@@ -494,10 +496,10 @@ CRITICAL FORMATTING RULES:
                         'status': 'success'
                     }
                 else:
-                    # RATE LIMITING: Add 1.5 second delay between AI-generated responses
+                    # RATE LIMITING: Add delay between AI-generated responses
                     # to avoid overwhelming the API and ensure quality responses
                     if len(results) > 0:  # Don't delay before first request
-                        time.sleep(1.5)
+                        time.sleep(ReviewResponseConfig.RATE_LIMIT_DELAY)
 
                     # Generate custom AI response
                     response = self.generate_review_response(

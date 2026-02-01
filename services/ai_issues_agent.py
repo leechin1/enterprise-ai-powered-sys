@@ -14,6 +14,9 @@ from langfuse import observe
 import json
 import re
 
+# Import centralized config
+from services.config import GCPConfig, ModelConfig
+
 # Import database schema
 from utils.database_schema import get_schema
 
@@ -51,10 +54,6 @@ load_dotenv()
 from utils.clients import setup_gcp_credentials
 setup_gcp_credentials()
 
-MODEL = os.getenv('VERTEX_MODEL')
-PROJECT_ID = os.getenv('GCP_PROJECT_ID')
-LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
-
 # Silence OpenTelemetry (Langfuse) errors
 logging.getLogger("opentelemetry.sdk._shared_internal").setLevel(logging.CRITICAL)
 
@@ -65,10 +64,10 @@ class AIIssuesAgent:
     def __init__(self):
         # Initialize Vertex AI model (uses GCP credits)
         self.llm = ChatVertexAI(
-            model=MODEL,
-            project=PROJECT_ID,
-            location=LOCATION,
-            temperature=0.7,
+            model=GCPConfig.VERTEX_MODEL,
+            project=GCPConfig.PROJECT_ID,
+            location=GCPConfig.LOCATION,
+            temperature=ModelConfig.get_temperature('issues'),
         )
 
         # Initialize Supabase client for SQL execution
@@ -298,7 +297,7 @@ class AIIssuesAgent:
                 "stage": 0,
                 "data": queries_data,
                 "raw_response": agent_response,
-                "model": MODEL
+                "model": GCPConfig.VERTEX_MODEL
             }
 
         except Exception as e:
@@ -500,7 +499,7 @@ class AIIssuesAgent:
                 "stage": 1,
                 "data": issues_data,
                 "raw_response": agent_response,
-                "model": MODEL
+                "model": GCPConfig.VERTEX_MODEL
             }
 
         except Exception as e:
@@ -670,7 +669,7 @@ class AIIssuesAgent:
                 "stage": 2,
                 "data": fixes_data,
                 "raw_response": agent_response,
-                "model": MODEL
+                "model": GCPConfig.VERTEX_MODEL
             }
 
         except Exception as e:
@@ -710,5 +709,5 @@ class AIIssuesAgent:
             "type": "complete_analysis",
             "issues": issues_result,
             "fixes": fixes_result,
-            "model": MODEL
+            "model": GCPConfig.VERTEX_MODEL
         }

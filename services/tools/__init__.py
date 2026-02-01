@@ -28,6 +28,18 @@ from .generation_tools import (
     recommend_restock_quantity,
 )
 
+# Issues Agent tools (agentic workflow) - modular imports
+from .issues_state import IssuesAgentState
+from .issues_query_tools import generate_business_queries, execute_business_queries
+from .issues_analysis_tools import (
+    analyze_issues_from_results,
+    get_issue_details,
+    get_issue_detail,
+    find_issue_by_keyword,
+)
+from .issues_fix_tools import propose_fix_for_issue, edit_email, send_fix_emails
+from .issues_utility_tools import get_current_analysis_state, reset_analysis
+
 # Base class for custom tools
 from .base import BaseBusinessTools
 
@@ -36,6 +48,7 @@ __all__ = [
     "BaseBusinessTools",
     "BusinessQueryTools",
     "BusinessGenerationTools",
+    "IssuesAgentState",
     # Query functions
     "scan_business_metrics",
     "get_top_performing_products",
@@ -53,4 +66,16 @@ __all__ = [
     "generate_inventory_alert_email",
     "cancel_transaction",
     "recommend_restock_quantity",
+    # Issues Agent tools
+    "generate_business_queries",
+    "execute_business_queries",
+    "analyze_issues_from_results",
+    "propose_fix_for_issue",
+    "edit_email",
+    "send_fix_emails",
+    "get_current_analysis_state",
+    "reset_analysis",
+    "get_issue_details",
+    "get_issue_detail",
+    "find_issue_by_keyword",
 ]
