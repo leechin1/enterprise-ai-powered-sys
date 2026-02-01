@@ -131,21 +131,67 @@ class AssociationRuleRecommender:
             })
         return records
 
+    # ----- Database connections -----
+    def save_rules_to_db(
+        self,
+        client,
+        model_version: str,
+        scope: str = "order"
+    ):
+        """
+        Persist mined association rules to the database.
+        """
 
-baskets = [
-    ["milk", "bread", "butter"],
-    ["bread", "butter"],
-    ["milk", "bread"],
-    ["milk", "bread", "butter", "eggs"],
-    ["bread", "eggs"],
-    ["milk", "eggs"],
-]
+        if not self.rules:
+            raise ValueError("No rules to save. Fit the model first.")
 
-# Create recommender with low support/confidence to see some rules
-recommender = AssociationRuleRecommender(min_support=0.3, min_confidence=0.5)
-recommender.fit(baskets)
+        payload = [
+            {
+                "antecedent": rule["antecedent"],
+                "consequent": rule["consequent"],
+                "support": rule["support"],
+                "confidence": rule["confidence"],
+                "lift": rule["lift"],
+                "leverage": rule["leverage"],
+                "conviction": rule["conviction"],
+                "model_version": model_version,
+                "scope": scope,
+            }
+            for rule in self.rules
+        ]
 
-rules = recommender.get_rules()
-for r in rules:
-    print(r)
+        client.table("association_rules").insert(payload).execute()
 
+    def load_rules_from_db(
+        self,
+        client,
+        model_version: str,
+        scope: str = "order"
+    ):
+        """
+        Load association rules from the database.
+        """
+
+        result = (
+            client.table("association_rules")
+            .select("*")
+            .eq("model_version", model_version)
+            .eq("scope", scope)
+            .execute()
+        )
+
+        if not result.data:
+            raise ValueError("No rules found for this model version.")
+
+        self.rules = [
+            {
+                "antecedent": row["antecedent"],
+                "consequent": row["consequent"],
+                "support": row["support"],
+                "confidence": row["confidence"],
+                "lift": row["lift"],
+                "leverage": row["leverage"],
+                "conviction": row["conviction"],
+            }
+            for row in result.data
+        ]
