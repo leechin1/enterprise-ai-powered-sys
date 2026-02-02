@@ -248,16 +248,18 @@ def render_conversational_issues_interface():
             st.rerun()
 
         if st.button("📊 Check Analysis Status", use_container_width=True):
-            process_agentic_message(conv_agent, "What's the current state of our analysis?")
+            process_agentic_message(conv_agent, "What's the current state of our analysis? If nothing has been analyzed yet, offer to start a full business analysis.")
             st.rerun()
 
         st.markdown("---")
         st.markdown("### 💡 Quick Prompts")
 
         quick_prompts = [
-            ("🔍 Full Analysis", "Run a complete business analysis"),
-            ("📦 Inventory Check", "Check for inventory issues"),
-            ("💳 Payment Issues", "Are there any payment problems?"),
+            ("📦 Inventory Check", "Check for inventory and stock issues only"),
+            ("💳 Payment Issues", "Check for payment problems only"),
+            ("👥 Customer Reviews", "Check for customer satisfaction issues only"),
+            ("💰 Revenue Analysis", "Analyze sales and revenue trends only"),
+            ("🔍 Full Analysis", "Run a complete business analysis across all areas"),
             ("🔧 Fix Issue #1", "Propose a fix for issue 1"),
             ("📧 Send Emails", "Send the notification emails"),
         ]

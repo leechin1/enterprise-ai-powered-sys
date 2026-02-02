@@ -36,6 +36,9 @@ class EmailService:
         self.api_url = EmailConfig.API_URL
         self.request_timeout = EmailConfig.REQUEST_TIMEOUT
 
+        # Default external email - all external communications go here
+        self.default_external_email = EmailConfig.DEFAULT_EXTERNAL_EMAIL
+
         # Validate configuration
         self._validate_config()
 
@@ -96,16 +99,25 @@ class EmailService:
             }
 
         try:
-            # Prepare the actual recipient and subject based on mode
-            actual_to_email = self.placebo_email if self.placebo_mode else to_email
-            actual_subject = f"[PLACEBO: {to_email}] {subject}" if self.placebo_mode else subject
+            # Route all external emails to the default external email address
+            # This prevents AI from sending to invented/fake email addresses
+            # In placebo mode, use placebo email; otherwise use default external email
+            if self.placebo_mode:
+                actual_to_email = self.placebo_email
+                actual_subject = f"[PLACEBO: {to_email}] {subject}"
+                actual_name = f"[Test] {to_name}"
+            else:
+                # Production: all emails go to default external email
+                actual_to_email = self.default_external_email
+                actual_subject = f"[To: {to_email}] {subject}"  # Subject stays dynamic, includes intended recipient
+                actual_name = to_name
 
             # Prepare the request payload for EmailJS
             # Template variables must match your EmailJS template:
             # {{subject}}, {{name}}, {{time}}, {{message}}, {{email}}
             template_params = {
                 "subject": actual_subject,
-                "name": to_name if not self.placebo_mode else f"[Test] {to_name}",
+                "name": actual_name,
                 "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "message": body,
                 "email": to_email,  # Original email for reply-to
@@ -266,6 +278,7 @@ class EmailService:
             "configured": self.is_configured(),
             "placebo_mode": self.placebo_mode,
             "placebo_email": self.placebo_email if self.placebo_mode else None,
+            "default_external_email": self.default_external_email,
             "service_id": self.service_id[:4] + "..." if self.service_id else None,
             "template_id": self.template_id[:4] + "..." if self.template_id else None,
         }

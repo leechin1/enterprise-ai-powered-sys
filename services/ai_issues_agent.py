@@ -244,18 +244,92 @@ class AIIssuesAgent:
             print(f"Salvage attempt failed: {e}")
             return None
 
+    def _salvage_issues_response(self, response_text: str) -> Dict[str, Any]:
+        """Try to salvage issues from a malformed response."""
+        if not response_text:
+            return None
+
+        try:
+            # Try to find any JSON-like structure with issues
+            import re
+
+            # Look for issues array pattern
+            issues_pattern = r'"issues"\s*:\s*\[(.*?)\]'
+            match = re.search(issues_pattern, response_text, re.DOTALL)
+
+            if match:
+                issues_json = '[' + match.group(1) + ']'
+                # Try to parse individual issues
+                issues_data = json.loads(issues_json)
+
+                valid_issues = []
+                valid_categories = ["inventory", "payments", "customers", "revenue", "operations", "data_quality", "financial"]
+                valid_severities = ["critical", "high", "medium", "low"]
+
+                for issue in issues_data:
+                    if isinstance(issue, dict) and issue.get('title'):
+                        # Normalize category
+                        cat = issue.get('category', 'operations').lower().replace(' ', '_').replace('-', '_')
+                        if cat not in valid_categories:
+                            cat = 'operations'
+                        issue['category'] = cat
+
+                        # Normalize severity
+                        sev = issue.get('severity', 'medium').lower()
+                        if sev not in valid_severities:
+                            sev = 'medium'
+                        issue['severity'] = sev
+
+                        # Ensure required fields
+                        issue.setdefault('description', issue.get('title', 'No description'))
+                        issue.setdefault('affected_metrics', [])
+                        issue.setdefault('requires_action', True)
+
+                        valid_issues.append(issue)
+
+                if valid_issues:
+                    return {"issues": valid_issues}
+
+            return None
+
+        except Exception as e:
+            print(f"Salvage issues attempt failed: {e}")
+            return None
+
     @observe()
-    def generate_sql_queries(self) -> Dict[str, Any]:
+    def generate_sql_queries(self, focus_areas: List[str] = None) -> Dict[str, Any]:
         """
         STAGE 0: Generate SQL queries based on database schema
+
+        Args:
+            focus_areas: List of domains to focus on (inventory, payments, customers, revenue, all)
 
         Returns:
             Dictionary with SQL queries and metadata
         """
         try:
+            # Determine focus area string
+            focus_str = ", ".join(focus_areas) if focus_areas and "all" not in focus_areas else "all"
+            is_focused = focus_str != "all"
+
+            # Build the user message with focus area
+            if is_focused:
+                user_message = f"""Based on the database schema provided, generate SQL queries to investigate business issues.
+
+**FOCUS AREA: {focus_str}**
+
+IMPORTANT: You MUST only generate queries related to {focus_str}. Do NOT generate queries for other domains.
+- Generate 3-5 queries (NOT 5-10) since this is a focused analysis
+- Only query tables relevant to {focus_str}
+- Only investigate issues in the {focus_str} domain
+
+Return only the JSON response as specified in the prompt."""
+            else:
+                user_message = "Based on the database schema provided, generate 5-10 SQL queries to investigate potential business issues across all domains. Return only the JSON response as specified in the prompt."
+
             # Invoke SQL Generation agent
             result = self.sql_generation_agent.invoke({
-                "messages": [("user", "Based on the database schema provided, generate 5-10 SQL queries to investigate potential business issues. Return only the JSON response as specified in the prompt.")]
+                "messages": [("user", user_message)]
             })
 
             # Extract response
@@ -426,12 +500,13 @@ class AIIssuesAgent:
         }
 
     @observe()
-    def identify_business_issues(self, query_results: List[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def identify_business_issues(self, query_results: List[Dict[str, Any]] = None, focus_areas: List[str] = None) -> Dict[str, Any]:
         """
         STAGE 1: Identify critical business issues based on SQL query results
 
         Args:
             query_results: Results from execute_sql_queries()
+            focus_areas: List of domains to focus on (inventory, payments, customers, revenue, all)
 
         Returns:
             Dictionary with identified issues and metadata
@@ -445,6 +520,10 @@ class AIIssuesAgent:
             }
 
         try:
+            # Determine focus area string
+            focus_str = ", ".join(focus_areas) if focus_areas and "all" not in focus_areas else "all"
+            is_focused = focus_str != "all"
+
             # Format query results for the agent
             results_summary = "\n\n".join([
                 f"Query {res['query_id']}: {res['purpose']}\n"
@@ -454,9 +533,24 @@ class AIIssuesAgent:
                 for res in query_results
             ])
 
+            # Build user message based on focus areas
+            if is_focused:
+                user_message = f"""Based on these SQL query results, identify business issues.
+
+**FOCUS AREA: {focus_str}**
+
+IMPORTANT: You MUST only identify issues related to {focus_str}. Do NOT report issues from other domains.
+- Identify 2-5 significant issues (NOT exactly 7) in the {focus_str} domain only
+- If no significant issues are found, report that the {focus_str} area looks healthy
+- Use ONLY these category values: {focus_str}
+
+{results_summary}"""
+            else:
+                user_message = f"Based on these SQL query results, identify up to 7 critical business issues across all domains:\n\n{results_summary}"
+
             # Invoke Stage 1 agent with query results
             result = self.issues_agent.invoke({
-                "messages": [("user", f"Based on these SQL query results, identify exactly 7 critical business issues:\n\n{results_summary}")]
+                "messages": [("user", user_message)]
             })
 
             # Extract response
@@ -478,20 +572,16 @@ class AIIssuesAgent:
             # Extract and validate JSON
             issues_data = self._extract_and_validate_json(agent_response, IssuesAnalysisOutput)
 
-            # Fallback if validation failed
+            # Fallback if validation failed - try salvage or return empty
             if not issues_data or 'issues' not in issues_data:
-                issues_data = {
-                    "issues": [
-                        {
-                            "title": "Analysis Complete",
-                            "description": str(agent_response)[:200] if agent_response else "No response",
-                            "severity": "medium",
-                            "category": "operations",
-                            "affected_metrics": [],
-                            "requires_action": True
-                        }
-                    ]
-                }
+                # Try to salvage issues from raw response
+                salvaged = self._salvage_issues_response(agent_response)
+                if salvaged:
+                    issues_data = salvaged
+                else:
+                    # Return empty issues array - the response will say "no issues found"
+                    print(f"Could not parse issues response, returning empty: {agent_response[:200] if agent_response else 'No response'}")
+                    issues_data = {"issues": []}
 
             return {
                 "success": True,

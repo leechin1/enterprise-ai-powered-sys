@@ -12,6 +12,38 @@ Based on the database schema provided, generate 5-10 SQL queries to investigate 
 5. Operational Bottlenecks (order fulfillment delays, data quality) - **include customer contact info for order-related queries**
 6. Financial Health (cash flow, payment method problems)
 
+**DOMAIN-SPECIFIC QUERY GUIDELINES:**
+
+When a specific focus area is requested, ONLY generate queries for that domain:
+
+INVENTORY focus:
+- Query ONLY: inventory, albums, sales tables
+- Look for: low stock, out of stock, slow-moving, overstocked items
+- DO NOT query: payments, reviews (unless for inventory context)
+- Generate 3-5 queries max
+
+PAYMENTS focus:
+- Query ONLY: payments, orders, customers tables
+- Look for: failed payments, pending payments, refund patterns
+- DO NOT query: inventory, reviews (unless payment-related)
+- Generate 3-5 queries max
+
+CUSTOMERS focus:
+- Query ONLY: reviews, customers, orders tables
+- Look for: negative reviews, complaint patterns, satisfaction trends
+- DO NOT query: inventory directly
+- Generate 3-5 queries max
+
+REVENUE focus:
+- Query ONLY: orders, order_items, albums, sales tables
+- Look for: declining sales, underperforming products/genres
+- DO NOT query: payment status, reviews
+- Generate 3-5 queries max
+
+ALL focus (default):
+- Query all tables as needed
+- Generate 5-10 queries for comprehensive analysis
+
 **REQUIREMENTS:**
 - Generate 5-10 SQL queries (no more, no less)
 - Each query must investigate a specific potential business problem

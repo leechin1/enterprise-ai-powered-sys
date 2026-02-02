@@ -16,6 +16,14 @@ from google import genai
 from google.genai import types
 from langfuse import observe
 
+# PDF extraction support
+try:
+    import fitz  # PyMuPDF
+    PDF_SUPPORT = True
+except ImportError:
+    PDF_SUPPORT = False
+    print("PyMuPDF not installed. PDF support disabled. Install with: pip install pymupdf")
+
 # Import centralized config
 from services.config import GCPConfig, ModelConfig, RAGConfig
 
@@ -56,6 +64,26 @@ class RAGService:
         # Load system prompt from file
         from services.prompts import load_prompt
         self.system_prompt = load_prompt('rag_chatbot_system_prompt.txt')
+
+    def _extract_pdf_text(self, pdf_path: str) -> str:
+        """
+        Extract text from a PDF file using PyMuPDF
+
+        Args:
+            pdf_path: Path to the PDF file
+
+        Returns:
+            Extracted text content
+        """
+        if not PDF_SUPPORT:
+            raise ImportError("PyMuPDF is required for PDF support. Install with: pip install pymupdf")
+
+        text_parts = []
+        with fitz.open(pdf_path) as doc:
+            for page in doc:
+                text_parts.append(page.get_text())
+
+        return "\n\n".join(text_parts)
 
     def _chunk_text(self, text: str, chunk_size: int = None, overlap: int = None) -> List[str]:
         """
@@ -140,7 +168,7 @@ class RAGService:
         Index a document by chunking it and storing embeddings
 
         Args:
-            document_path: Path to the document file (markdown or text)
+            document_path: Path to the document file (markdown, text, or PDF)
             metadata: Optional metadata to store with chunks
 
         Returns:
@@ -149,10 +177,19 @@ class RAGService:
         try:
             path = Path(document_path)
             document_name = path.stem
+            file_extension = path.suffix.lower()
 
-            # Read document content
-            with open(document_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            # Read document content based on file type
+            if file_extension == '.pdf':
+                if not PDF_SUPPORT:
+                    return {
+                        "success": False,
+                        "error": "PDF support not available. Install pymupdf: pip install pymupdf"
+                    }
+                content = self._extract_pdf_text(document_path)
+            else:
+                with open(document_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
 
             # Chunk the document
             chunks = self._chunk_text(content)
@@ -193,7 +230,7 @@ class RAGService:
                 "error": str(e)
             }
 
-    def index_documents_from_directory(self, directory_path: str, extensions: List[str] = ['.md', '.txt']) -> Dict[str, Any]:
+    def index_documents_from_directory(self, directory_path: str, extensions: List[str] = ['.md', '.txt', '.pdf']) -> Dict[str, Any]:
         """
         Index all documents from a directory
 

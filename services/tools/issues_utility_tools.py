@@ -15,8 +15,27 @@ def get_current_analysis_state() -> str:
 
     Returns:
         Summary of current queries, results, issues, and proposed fixes.
+        If no analysis has been done, suggests starting one.
     """
     state = IssuesAgentState.get_instance()
+
+    # Check if any analysis has been done
+    has_any_state = state.queries or state.query_results or state.issues or state.proposed_fixes
+
+    if not has_any_state:
+        return """## 📊 Current Analysis State
+
+**Status:** No analysis in progress.
+
+No queries have been generated or executed yet. This is a fresh session.
+
+**To start an analysis, you can:**
+- Say "Run a full business analysis" for comprehensive analysis
+- Say "Check inventory issues" to focus on stock problems
+- Say "Look for payment problems" to focus on transactions
+- Or describe any specific business concern you have
+
+I'll automatically generate SQL queries, execute them, and identify any issues."""
 
     response = "## 📊 Current Analysis State\n\n"
 
@@ -47,6 +66,20 @@ def get_current_analysis_state() -> str:
         response += "**Fix Proposed:** Not yet ❌\n"
 
     response += f"\n**Focus Areas:** {', '.join(state.focus_areas) if state.focus_areas else 'Not set'}"
+
+    # Add next steps based on current state
+    response += "\n\n**Next steps:**\n"
+    if not state.queries:
+        response += "- Generate queries with `generate_business_queries()`\n"
+    elif not state.query_results:
+        response += "- Execute queries with `execute_business_queries()`\n"
+    elif not state.issues:
+        response += "- Analyze results with `analyze_issues_from_results()`\n"
+    elif not state.proposed_fixes:
+        response += "- Get a fix proposal with `propose_fix_for_issue(N)`\n"
+    else:
+        response += "- Send notifications with `send_fix_emails()`\n"
+        response += "- Or start fresh with `reset_analysis()`\n"
 
     return response
 

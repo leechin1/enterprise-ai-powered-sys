@@ -187,12 +187,15 @@ def send_fix_emails() -> str:
         if email_service.placebo_mode:
             response += f"🧪 **Placebo Mode Active**\n"
             response += f"All emails were sent to: `{email_service.placebo_email}`\n\n"
+        else:
+            response += f"📧 **All emails routed to:** `{email_service.default_external_email}`\n"
+            response += f"Subject line includes intended recipient for tracking.\n\n"
 
         # Show what was sent
         response += "### Emails Sent:\n"
         for i, email in enumerate(emails, 1):
             response += f"{i}. **{email.get('subject', 'No subject')}**\n"
-            response += f"   To: {', '.join(email.get('recipient_emails', []))}\n"
+            response += f"   Intended for: {', '.join(email.get('recipient_emails', []))}\n"
 
         response += "\n✅ **Fix execution complete!**"
 

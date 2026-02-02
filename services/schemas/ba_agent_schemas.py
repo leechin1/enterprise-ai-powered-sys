@@ -44,8 +44,8 @@ class SQLQueriesOutput(BaseModel):
     """Collection of SQL queries for business analysis"""
     queries: List[SQLQuery] = Field(
         ...,
-        description="5-10 SQL queries to identify business issues",
-        min_length=5,
+        description="SQL queries to identify business issues (1-10 for focused analysis, 5-10 for full)",
+        min_length=1,
         max_length=10
     )
 
@@ -65,11 +65,10 @@ class BusinessIssue(BaseModel):
 
 
 class IssuesAnalysisOutput(BaseModel):
-    """Complete issues analysis output with exactly 7 issues"""
+    """Complete issues analysis output with 0-7 issues (flexible for focused analysis)"""
     issues: List[BusinessIssue] = Field(
-        ...,
-        description="Exactly 7 critical business issues",
-        min_length=7,
+        default_factory=list,
+        description="Business issues (0-7 for focused analysis, up to 7 for full analysis)",
         max_length=7
     )
 

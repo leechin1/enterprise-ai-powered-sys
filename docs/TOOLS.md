@@ -534,3 +534,444 @@ Tools gracefully handle:
 - Missing records (customer/album not found)
 - Empty result sets
 - Invalid parameters
+
+---
+
+## Issues Agent Tools
+
+The Issues Agent uses a separate set of tools for autonomous business issue detection and resolution. These tools work in a sequential pipeline with shared state management.
+
+### Tool Categories
+
+| Category | Module | Purpose |
+|----------|--------|---------|
+| **Query Tools** | `issues_query_tools.py` | SQL generation and execution |
+| **Analysis Tools** | `issues_analysis_tools.py` | Issue identification and lookup |
+| **Fix Tools** | `issues_fix_tools.py` | Fix proposals and email sending |
+| **Utility Tools** | `issues_utility_tools.py` | State management |
+
+### State Management
+
+All Issues Agent tools share state through `IssuesAgentState` singleton:
+- `queries`: Generated SQL queries
+- `query_results`: Executed query results
+- `issues`: Identified business issues
+- `proposed_fixes`: Generated fix proposals
+- `focus_areas`: Areas being analyzed
+
+---
+
+### Query Tools
+
+#### `generate_business_queries`
+
+Generates SQL queries to investigate potential business issues. This is typically the **FIRST step** in the analysis pipeline.
+
+**Purpose:** Creates targeted SQL queries based on focus areas to gather data for issue analysis.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `focus_areas` | `str` | `"all"` | Areas to focus analysis on |
+
+**Focus Area Options:**
+- `"inventory"` - Stock issues
+- `"payments"` - Payment/transaction issues
+- `"customers"` - Customer satisfaction issues
+- `"revenue"` - Sales/revenue concerns
+- `"operations"` - Operational issues
+- `"all"` - Comprehensive analysis (default)
+- Can combine multiple: `"inventory, payments"`
+
+**Returns:** `str` - Summary of generated queries with purposes and priorities
+
+**Example Output:**
+```
+✅ **Generated 5 SQL Queries**
+Focus areas: inventory, payments
+
+1. 🔴 **Find out-of-stock items** (critical)
+   _Identifies albums with zero inventory_
+
+2. 🟠 **Check failed payments** (high)
+   _Retrieves all failed payment transactions_
+
+**Next step:** Call `execute_business_queries()` to run these queries.
+```
+
+---
+
+#### `execute_business_queries`
+
+Executes the previously generated SQL queries against the database.
+
+**Purpose:** Runs all generated queries and stores results for analysis.
+
+**Parameters:** None
+
+**Prerequisites:** Must call `generate_business_queries()` first
+
+**Returns:** `str` - Summary of query execution with row counts
+
+**Example Output:**
+```
+✅ **Executed 5/5 Queries Successfully**
+
+✅ **Find out-of-stock items**: 3 rows
+✅ **Check failed payments**: 7 rows
+✅ **Low stock items**: 12 rows
+
+**Next step:** Call `analyze_issues_from_results()` to identify business issues.
+```
+
+---
+
+### Analysis Tools
+
+#### `analyze_issues_from_results`
+
+Analyzes query results to identify business issues using AI.
+
+**Purpose:** Uses LLM to interpret query data and identify actionable business problems.
+
+**Parameters:** None
+
+**Prerequisites:** Must call `execute_business_queries()` first
+
+**Returns:** `str` - Detailed list of identified issues with severity and descriptions
+
+**Severity Levels:**
+- 🔴 `critical` - Requires immediate attention
+- 🟠 `high` - Should be addressed soon
+- 🟡 `medium` - Should be monitored
+- 🟢 `low` - Minor concern
+
+**Category Icons:**
+- 📦 `inventory` - Stock-related issues
+- 💳 `payments` - Payment/transaction issues
+- 👥 `customers` - Customer satisfaction
+- 💰 `revenue` - Sales/revenue issues
+- ⚙️ `operations` - Operational issues
+- 📊 `data_quality` - Data integrity issues
+
+**Example Output:**
+```
+⚠️ **Identified 3 Business Issues**
+
+### 1. 📦 Critical Stock Shortage
+**Severity:** 🔴 CRITICAL | **Category:** inventory
+
+5 albums are completely out of stock with pending customer orders.
+
+---
+
+### 2. 💳 Failed Payment Spike
+**Severity:** 🟠 HIGH | **Category:** payments
+
+7 payment failures in the last 24 hours, up 300% from normal.
+
+---
+
+**Next step:** Call `propose_fix_for_issue(issue_number)` to get a fix proposal.
+```
+
+---
+
+#### `get_issue_details`
+
+Gets detailed information about a specific identified issue.
+
+**Purpose:** Retrieve full details for a single issue without re-running analysis.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `issue_number` | `int` | Yes | The issue number (1-based index) |
+
+**Returns:** `str` - Full details including severity, category, description, and affected records
+
+---
+
+#### `get_issue_detail`
+
+Alias for `get_issue_details` - identical functionality.
+
+---
+
+#### `find_issue_by_keyword`
+
+Search for issues by keyword in title or description.
+
+**Purpose:** Find issues when you know part of the name but not the number.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `keyword` | `str` | Yes | Word or phrase to search for |
+
+**Returns:** `str` - Matching issue details, or list of all issues if no match
+
+**Example Output (multiple matches):**
+```
+🔍 **Found 2 issues matching 'payment':**
+
+2. 🟠 **Failed Payment Spike**
+5. 🟡 **Payment Method Distribution Imbalance**
+
+Call `get_issue_details(N)` to see full details for a specific issue.
+```
+
+---
+
+### Fix Tools
+
+#### `propose_fix_for_issue`
+
+Generates a detailed fix proposal for a specific issue, including automated actions and email notifications.
+
+**Purpose:** Creates actionable fix plans with recipient lists and pre-generated emails.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `issue_number` | `int` | Yes | The issue number (1-based) from identified issues |
+
+**Prerequisites:** Must call `analyze_issues_from_results()` first
+
+**Returns:** `str` - Comprehensive fix proposal including:
+- Fix title and description
+- Automated actions to take
+- Expected outcome
+- Priority level
+- List of recipients with roles and contact info
+- Pre-generated email previews
+
+**Example Output:**
+```
+## 🔧 Fix Proposal for Issue #1
+
+**Issue:** Critical Stock Shortage
+
+### Urgent Inventory Restock Required
+_Immediate reorder of out-of-stock albums with pending orders_
+
+### 📋 Automated Actions
+- Flag affected orders for customer notification
+- Generate purchase orders for suppliers
+- Update inventory status in system
+
+**Expected Outcome:** Stock replenished within 3-5 business days
+**Priority:** IMMEDIATE
+
+### 👥 Recipients (2)
+- **Sarah Chen** (inventory_manager)
+  Email: sarah@company.com | Reason: Manages supplier relationships
+- **Mike Johnson** (operations_lead)
+  Email: mike@company.com | Reason: Oversees fulfillment
+
+### 📧 Emails Ready to Send (2)
+
+**Email 1:** Urgent: Immediate Restock Required
+To: sarah@company.com
+```
+Dear Sarah,
+
+We have identified 5 albums that are out of stock...
+```
+
+---
+**Next steps:**
+- Call `send_fix_emails()` to send the notification emails
+- Call `edit_email(email_number, field, new_value)` to modify an email first
+```
+
+---
+
+#### `edit_email`
+
+Edit a specific field of a generated email before sending.
+
+**Purpose:** Allows modification of auto-generated emails for accuracy or tone.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `email_number` | `int` | Yes | Which email to edit (1-based index) |
+| `field` | `str` | Yes | Field to edit: `"subject"` or `"body"` |
+| `new_value` | `str` | Yes | The new value for the field |
+
+**Prerequisites:** Must call `propose_fix_for_issue()` first
+
+**Returns:** `str` - Confirmation with updated email preview
+
+**Example Output:**
+```
+✅ **Email 1 Updated**
+
+**Field:** subject
+**Old value:** Urgent: Immediate Restock Required
+**New value:** ACTION REQUIRED: Critical Stock Shortage
+
+**Updated Email Preview:**
+Subject: ACTION REQUIRED: Critical Stock Shortage
+To: sarah@company.com
+```
+Dear Sarah,
+
+We have identified 5 albums...
+```
+```
+
+---
+
+#### `send_fix_emails`
+
+Sends all notification emails for the currently proposed fix.
+
+**Purpose:** Dispatches emails to all recipients. In placebo mode, all emails go to the test address.
+
+**Parameters:** None
+
+**Prerequisites:** Must call `propose_fix_for_issue()` first
+
+**Email Routing:**
+- **Placebo Mode:** All emails sent to `PLACEBO_EMAIL` with `[PLACEBO: original@email.com]` in subject
+- **Production Mode:** All external emails routed to `DEFAULT_EXTERNAL_EMAIL` (hi@mistyrecords.com) with intended recipient in subject
+
+**Returns:** `str` - Confirmation with sent/failed counts
+
+**Example Output:**
+```
+## 📬 Email Results
+
+**Sent:** 2 ✅
+**Failed:** 0
+
+🧪 **Placebo Mode Active**
+All emails were sent to: `test@company.com`
+
+### Emails Sent:
+1. **ACTION REQUIRED: Critical Stock Shortage**
+   Intended for: sarah@company.com
+2. **Inventory Alert: Immediate Action Needed**
+   Intended for: mike@company.com
+
+✅ **Fix execution complete!**
+```
+
+---
+
+### Utility Tools
+
+#### `get_current_analysis_state`
+
+Gets a summary of the current analysis pipeline state.
+
+**Purpose:** Check what has been done so far in the analysis workflow.
+
+**Parameters:** None
+
+**Returns:** `str` - State summary showing completed steps
+
+**Example Output:**
+```
+## 📊 Current Analysis State
+
+**Queries Generated:** 5 ✅
+**Queries Executed:** 5 results ✅
+**Issues Identified:** 3 ✅
+  1. [CRITICAL] Critical Stock Shortage
+  2. [HIGH] Failed Payment Spike
+  3. [MEDIUM] Customer Review Decline
+**Fix Proposed:** Yes ✅ (for issue #1)
+
+**Focus Areas:** inventory, payments
+```
+
+---
+
+#### `reset_analysis`
+
+Resets all analysis state to start fresh.
+
+**Purpose:** Clear all stored data to begin a new analysis session.
+
+**Parameters:** None
+
+**Returns:** `str` - Confirmation message
+
+**Example Output:**
+```
+🔄 **Analysis state reset!**
+
+Ready to start a new analysis. You can:
+- Call `generate_business_queries()` to investigate all areas
+- Call `generate_business_queries('inventory')` to focus on specific areas
+```
+
+---
+
+## Issues Agent Workflow
+
+The recommended workflow for the Issues Agent:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ISSUES AGENT PIPELINE                        │
+└─────────────────────────────────────────────────────────────────┘
+
+1. generate_business_queries("focus_areas")
+         │
+         ▼
+2. execute_business_queries()
+         │
+         ▼
+3. analyze_issues_from_results()
+         │
+         ├──► get_issue_details(N)      [Optional: view details]
+         ├──► find_issue_by_keyword()   [Optional: search issues]
+         │
+         ▼
+4. propose_fix_for_issue(issue_number)
+         │
+         ├──► edit_email(N, field, value)  [Optional: modify]
+         │
+         ▼
+5. send_fix_emails()
+
+         ▼
+   [reset_analysis() to start over]
+```
+
+---
+
+## Tool Integration
+
+### LangChain Usage
+
+All Issues Agent tools are exposed as function wrappers:
+
+```python
+from services.tools import (
+    # Query tools
+    generate_business_queries,
+    execute_business_queries,
+    # Analysis tools
+    analyze_issues_from_results,
+    get_issue_details,
+    get_issue_detail,
+    find_issue_by_keyword,
+    # Fix tools
+    propose_fix_for_issue,
+    edit_email,
+    send_fix_emails,
+    # Utility tools
+    get_current_analysis_state,
+    reset_analysis,
+)
+```

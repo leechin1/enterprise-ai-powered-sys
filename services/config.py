@@ -96,6 +96,10 @@ class EmailConfig:
     REQUEST_TIMEOUT: int = 30
     CORS_ORIGIN: str = 'http://localhost'
 
+    # Default email for all external communications (customers, suppliers, etc.)
+    # All non-internal emails will be routed here to prevent AI-generated fake addresses
+    DEFAULT_EXTERNAL_EMAIL: str = 'hi@mistyrecords.com'
+
 
 # =============================================================================
 # ACTIVITY LOG CONFIGURATION

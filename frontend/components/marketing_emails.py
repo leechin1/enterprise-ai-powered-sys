@@ -369,7 +369,9 @@ def render_marketing_emails_tab():
                                 else:
                                     st.info(f"""
                                     📊 **Campaign Stats**
-                                    - Emails Sent: {len(customers_df)}
+                                    - All emails sent to: {status.get('default_external_email')}
+                                    - Campaign for: {len(customers_df)} customers
+                                    - Subject includes intended recipient
                                     - Campaign ID: #{datetime.now().strftime('%Y%m%d%H%M%S')}
                                     """)
                             else:
@@ -655,9 +657,9 @@ def render_batch_results_popup(category_key, category_info):
                 else:
                     st.info(f"""
                     📊 **Send Summary**
-                    - Responses Sent: {emails_sent}
-                    - Failed: {emails_failed}
+                    - All {emails_sent} emails sent to: {status.get('default_external_email')}
                     - Category: {category_info['title']}
+                    - Subject includes intended recipient for each email
                     - Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                     """)
             else:

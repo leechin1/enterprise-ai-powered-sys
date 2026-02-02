@@ -36,9 +36,9 @@ def generate_business_queries(focus_areas: str = "all") -> str:
     areas = [a.strip().lower() for a in focus_areas.split(',')]
     state.focus_areas = areas
 
-    # Use base agent to generate queries
+    # Use base agent to generate queries with focus areas
     base_agent = AIIssuesAgent()
-    result = base_agent.generate_sql_queries()
+    result = base_agent.generate_sql_queries(focus_areas=areas)
 
     if not result.get('success'):
         return f"❌ Failed to generate queries: {result.get('error', 'Unknown error')}"
@@ -70,7 +70,7 @@ def execute_business_queries() -> str:
     MUST call generate_business_queries() first.
 
     Returns:
-        Summary of query execution results including row counts and any errors.
+        Summary of query execution results including row counts, sample data, and any errors.
     """
     state = IssuesAgentState.get_instance()
 
@@ -88,14 +88,20 @@ def execute_business_queries() -> str:
 
     successful = result.get('successful_queries', 0)
     total = result.get('total_queries', 0)
+    total_rows = sum(len(r.get('data', [])) for r in results)
 
     response = f"✅ **Executed {successful}/{total} Queries Successfully**\n\n"
+    response += f"📊 **Total Records Found:** {total_rows}\n\n"
+
+    response += "| Query | Purpose | Records |\n"
+    response += "|-------|---------|--------|\n"
 
     for r in results:
         status = "✅" if r.get('success') else "❌"
         row_count = len(r.get('data', []))
-        response += f"{status} **{r.get('purpose', 'Query')}**: {row_count} rows\n"
+        purpose = r.get('purpose', 'Query')[:40]
+        response += f"| {status} {r.get('query_id', '?')} | {purpose} | {row_count} |\n"
 
-    response += f"\n**Next step:** Call `analyze_issues_from_results()` to identify business issues."
+    response += f"\n**Next step:** Call `analyze_issues_from_results()` to identify business issues and see full data dashboard."
 
     return response
