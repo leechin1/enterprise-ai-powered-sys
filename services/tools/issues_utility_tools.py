@@ -96,4 +96,4 @@ def reset_analysis() -> str:
     state = IssuesAgentState.get_instance()
     state.reset()
 
-    return "🔄 **Analysis state reset!**\n\nReady to start a new analysis. You can:\n- Call `generate_business_queries()` to investigate all areas\n- Call `generate_business_queries('inventory')` to focus on specific areas"
+    return "🔄 **Analysis state reset!**\n\nReady to start a new analysis. What area would you like to investigate?"

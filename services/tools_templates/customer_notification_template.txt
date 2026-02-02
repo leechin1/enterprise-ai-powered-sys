@@ -1,0 +1,20 @@
+CUSTOMER NOTIFICATION
+=====================
+
+To: {recipient_email}
+Subject: Update from Misty Jazz Records: {title}
+
+Dear Valued Customer,
+
+We wanted to reach out to you regarding an update from Misty Jazz Records.
+
+**Regarding:** {title}
+
+{description}
+
+We appreciate your patience and continued support. If you have any questions, please don't hesitate to contact us.
+
+Best regards,
+Misty Jazz Records Customer Service
+
+=====================

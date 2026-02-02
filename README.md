@@ -24,8 +24,31 @@ Misty AI Enterprise System is an internal operations platform for Misty Jazz Rec
 
 ## Features
 
+### AI Issues Agent (Main Feature)
+
+The AI Issues Agent is the core intelligence system of this platform. It provides autonomous business issue detection and resolution through a sophisticated multi-stage pipeline:
+
+**How It Works:**
+1. **SQL Generation (Stage 0)** - AI analyzes database schema and generates targeted SQL queries for specific business domains
+2. **Issue Identification (Stage 1)** - Query results are analyzed to identify critical business issues with severity levels
+3. **Fix Proposals (Stage 2)** - Automated fix proposals with pre-generated emails ready for management approval
+
+**Key Capabilities:**
+- Domain-focused analysis (inventory, payments, customers, revenue, or comprehensive)
+- Real-time data dashboard with query results
+- On-demand email generation for any identified issue
+- Four email types: management, supplier, customer, team notifications
+- Template-based email system using `tools_templates/`
+
+**Two Operating Modes:**
+- **Classic Mode** - Three-stage UI with step-by-step analysis
+- **Conversational Mode** - Multi-turn ReAct agent dialogue with natural language interaction
+
+See [docs/TOOLS.md](docs/TOOLS.md) for complete documentation of all 26 function calling tools.
+
+### Other Features
+
 - **Real-time Analytics Dashboard** - Sales, inventory, customer, and payment metrics with interactive visualizations
-- **AI Business Reporting** - Multi-agent system with automated health analysis, issue detection, and fix proposals
 - **RAG Knowledge Base** - Query 15+ enterprise documents and jazz domain research with source citations
 - **Marketing Automation** - Customer segmentation and AI-generated email campaigns
 - **Review Response Management** - Batch sentiment analysis and automated response generation
@@ -276,19 +299,30 @@ enterprise-ai-powered-sys/
 │   │   ├── marketing_schemas.py     # Email campaign schemas
 │   │   └── review_agent_schemas.py  # Review response schemas
 │   │
-│   ├── tools/                       # LangChain function tools
+│   ├── tools/                       # LangChain function tools (26 tools)
+│   │   ├── __init__.py              # Tool exports
+│   │   ├── base.py                  # Base tools class
 │   │   ├── query_tools.py           # 11 read-only analytics tools
 │   │   ├── generation_tools.py      # 4 content generation tools
-│   │   ├── issues_query_tools.py    # SQL generation & execution
-│   │   ├── issues_analysis_tools.py # Issue identification
-│   │   ├── issues_fix_tools.py      # Fix proposals & email sending
-│   │   ├── issues_utility_tools.py  # State management
-│   │   └── issues_state.py          # Shared state singleton
+│   │   ├── issues_query_tools.py    # SQL generation & execution (2 tools)
+│   │   ├── issues_analysis_tools.py # Issue identification (4 tools)
+│   │   ├── issues_fix_tools.py      # Fix proposals & email sending (4 tools)
+│   │   ├── issues_utility_tools.py  # State management (2 tools)
+│   │   ├── issues_state.py          # Shared state singleton
+│   │   └── prompts/                 # Issues agent prompts
+│   │       ├── __init__.py          # Prompt loader
+│   │       ├── issues_stage0_sql_generation_prompt.txt
+│   │       ├── issues_stage1_analysis_prompt.txt
+│   │       └── issues_stage2_fixes_prompt.txt
 │   │
-│   └── tools_templates/             # Email/report templates
+│   └── tools_templates/             # Email/report templates (8 templates)
 │       ├── customer_email_template.txt
+│       ├── customer_notification_template.txt
 │       ├── inventory_alert_email_template.txt
+│       ├── management_notification_template.txt
 │       ├── restock_recommendation_template.txt
+│       ├── supplier_notification_template.txt
+│       ├── team_notification_template.txt
 │       └── transaction_cancelled_template.txt
 │
 └── utils/

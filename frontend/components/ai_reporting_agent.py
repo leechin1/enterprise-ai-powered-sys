@@ -53,7 +53,7 @@ def render_ai_reporting_agent():
     """Render AI Business Intelligence Reporting page with new agent architecture"""
 
     st.title("🤖 AI Business Intelligence Reporting")
-    st.caption("AI-powered business consultation using Gemini 2.0-flash with LangChain agents")
+    st.caption("AI-powered business consultation using Gemini 2.5-flash with LangChain agents")
 
     # Initialize connectors
     try:
@@ -221,7 +221,11 @@ def render_conversational_issues_interface():
                     st.markdown(msg['content'])
             else:
                 with st.chat_message("assistant", avatar="🤖"):
-                    st.markdown(msg['content'])
+                    # Fix escaped newlines that LLM might produce when copying tool output
+                    content = msg['content']
+                    if isinstance(content, str):
+                        content = content.replace('\\n', '\n').replace('\\t', '\t')
+                    st.markdown(content)
 
                     # Show tools used if any
                     tools = msg.get('tools_used', [])

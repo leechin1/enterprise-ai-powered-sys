@@ -1,7 +1,7 @@
 INVENTORY ALERT EMAIL
 =====================
 
-To: inventory@mistyjazzrecords.com
+To: hi@mistyrecords.com
 Subject: LOW STOCK ALERT - Immediate Action Required
 
 Dear Inventory Manager,

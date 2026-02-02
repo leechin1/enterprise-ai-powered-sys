@@ -1,0 +1,22 @@
+SUPPLIER NOTIFICATION
+=====================
+
+To: {recipient_email}
+Subject: [Action Required] Inventory Issue: {title}
+
+Dear Supplier Partner,
+
+We are reaching out regarding an inventory matter that may require your assistance.
+
+**Issue:** {title}
+**Category:** {category}
+
+**Details:**
+{description}
+
+Please review and let us know if you can assist with this matter. We would appreciate a response at your earliest convenience.
+
+Best regards,
+Misty Jazz Records Inventory Team
+
+=====================

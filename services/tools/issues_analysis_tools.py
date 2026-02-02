@@ -97,7 +97,7 @@ def analyze_issues_from_results() -> str:
     state = IssuesAgentState.get_instance()
 
     if not state.query_results:
-        return "❌ No query results to analyze. Call `execute_business_queries()` first."
+        return "❌ No query results to analyze. Please execute queries first."
 
     base_agent = AIIssuesAgent()
     # Pass focus_areas to filter issue identification
@@ -138,8 +138,7 @@ def analyze_issues_from_results() -> str:
         response += f"{issue.get('description', 'No description')}\n\n"
         response += "---\n\n"
 
-    response += "**Next step:** Call `propose_fix_for_issue(issue_number)` to get a fix proposal.\n"
-    response += "Example: `propose_fix_for_issue(1)` for the first issue.\n\n"
+    response += "**Status:** Issues identified and ready for review.\n\n"
 
     # Add metrics summary at the end
     response += metrics_summary
@@ -164,7 +163,7 @@ def _format_issue_details(issue: dict, issue_number: int) -> str:
     if issue.get('impact'):
         response += f"**Business Impact:** {issue.get('impact')}\n"
 
-    response += f"\n**To fix this issue:** Call `propose_fix_for_issue({issue_number})`"
+    response += f"\n**Status:** Issue details loaded."
     return response
 
 
@@ -257,5 +256,5 @@ def find_issue_by_keyword(keyword: str) -> str:
         severity_icons = {'critical': '🔴', 'high': '🟠', 'medium': '🟡', 'low': '🟢'}
         response += f"{issue_num}. {severity_icons.get(sev, '⚪')} **{issue.get('title', 'Issue')}**\n"
 
-    response += f"\nCall `get_issue_details(N)` to see full details for a specific issue."
+    response += f"\n**Status:** Multiple matches found. Specify which issue number to view."
     return response

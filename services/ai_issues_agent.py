@@ -22,7 +22,13 @@ from utils.database_schema import get_schema
 
 # Import Pydantic schemas
 from services.schemas.ba_agent_schemas import SQLQueriesOutput, IssuesAnalysisOutput, FixesOutput
-from services.prompts import load_prompt
+
+# Import issues-specific prompts from tools/prompts
+from services.tools.prompts import (
+    get_sql_generation_prompt,
+    get_issues_analysis_prompt,
+    get_fixes_prompt
+)
 
 # Import Supabase for SQL execution
 from supabase import create_client, Client
@@ -97,17 +103,17 @@ class AIIssuesAgent:
             recommend_restock_quantity,
         ]
 
-        # Load system prompts from files
+        # Load system prompts from tools/prompts
         self.stage0_prompt = f"""You are an expert business analyst and SQL developer for Misty Jazz Records.
 
 **DATABASE SCHEMA:**
 {get_schema()}
 
-{load_prompt('issues_stage0_sql_generation_prompt.txt')}
+{get_sql_generation_prompt()}
 """
 
-        self.stage1_prompt = load_prompt('issues_stage1_analysis_prompt.txt')
-        self.stage2_prompt = load_prompt('issues_stage2_fixes_prompt.txt')
+        self.stage1_prompt = get_issues_analysis_prompt()
+        self.stage2_prompt = get_fixes_prompt()
 
         # Create agents for all stages
         # Stage 0: SQL Generation (no tools needed)

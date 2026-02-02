@@ -97,8 +97,8 @@ class EmailConfig:
     CORS_ORIGIN: str = 'http://localhost'
 
     # Default email for all external communications (customers, suppliers, etc.)
-    # All non-internal emails will be routed here to prevent AI-generated fake addresses
-    DEFAULT_EXTERNAL_EMAIL: str = 'hi@mistyrecords.com'
+    # All emails are routed here - the agent displays hi@mistyrecords.com but delivers here
+    DEFAULT_EXTERNAL_EMAIL: str = 'carolinaleedev@gmail.com'
 
 
 # =============================================================================

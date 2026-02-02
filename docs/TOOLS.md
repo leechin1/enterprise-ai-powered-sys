@@ -1,15 +1,33 @@
 # Function Calling Tools Reference
 
-This document provides comprehensive documentation for all LangChain function calling tools available to the AI Business Consultant Agent.
+This document provides comprehensive documentation for all 26 LangChain function calling tools available to the AI Business Intelligence System.
+
+## The AI Issues Agent - Main Feature
+
+The AI Issues Agent is the primary intelligence system of this platform, providing autonomous business issue detection and resolution. It uses a sophisticated multi-stage pipeline:
+
+1. **SQL Generation (Stage 0)** - AI analyzes database schema and generates targeted SQL queries
+2. **Issue Identification (Stage 1)** - Query results are analyzed to identify critical business issues
+3. **Fix Proposals (Stage 2)** - Automated fix proposals with pre-generated emails
+
+The agent supports domain-focused analysis (inventory, payments, customers, revenue) and operates in two modes:
+- **Classic Mode** - Three-stage UI with step-by-step analysis
+- **Conversational Mode** - Multi-turn ReAct agent dialogue
 
 ## Overview
 
-Tools are organized into two categories:
+Tools are organized into categories:
 
-| Category | Module | Purpose |
-|----------|--------|---------|
-| **Query Tools** | `business_query_tools.py` | Read-only analytics and data retrieval |
-| **Generation Tools** | `business_generation_tools.py` | Content generation and write operations |
+| Category | Module | Tool Count | Purpose |
+|----------|--------|------------|---------|
+| **Query Tools** | `query_tools.py` | 11 | Read-only analytics and data retrieval |
+| **Generation Tools** | `generation_tools.py` | 4 | Content generation and write operations |
+| **Issues Query Tools** | `issues_query_tools.py` | 2 | SQL generation and execution |
+| **Issues Analysis Tools** | `issues_analysis_tools.py` | 4 | Issue identification and lookup |
+| **Issues Fix Tools** | `issues_fix_tools.py` | 4 | Fix proposals and email sending |
+| **Issues Utility Tools** | `issues_utility_tools.py` | 2 | State management |
+
+**Total: 26 Tools**
 
 ---
 
@@ -791,6 +809,68 @@ We have identified 5 albums that are out of stock...
 
 ---
 
+#### `generate_email_for_issue`
+
+Generates an email on-demand for a specific issue using templates from `tools_templates/`.
+
+**Purpose:** Create notification emails for issues that don't have pre-generated emails from fix proposals, or when you need a different type of email.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `issue_number` | `int` | Required | The issue number (1-based) from identified issues |
+| `email_type` | `str` | `"management"` | Type of notification email to generate |
+
+**Email Types:**
+
+| Type | Template | Recipient | Use Case |
+|------|----------|-----------|----------|
+| `"management"` | `management_notification_template.txt` | hi@mistyrecords.com | Alert leadership about business issues |
+| `"supplier"` | `supplier_notification_template.txt` | hi@mistyrecords.com | Contact suppliers about inventory/stock |
+| `"customer"` | `customer_notification_template.txt` | hi@mistyrecords.com | Notify customers about issues affecting them |
+| `"team"` | `team_notification_template.txt` | hi@mistyrecords.com | Alert internal team members |
+
+**Note:** ALL email types use `hi@mistyrecords.com` as the hardcoded recipient. The EmailService routes to the actual destination (placebo email in test mode, hi@mistyrecords.com in production).
+
+**Prerequisites:** Must call `analyze_issues_from_results()` first to have identified issues
+
+**Returns:** `str` - Generated email preview with subject, recipient, and body
+
+**Example Output:**
+```
+## 📧 Email Generated for Issue #3
+
+**Type:** Management Notification
+**Subject:** [HIGH] Business Issue Alert: Widespread Overstocking
+**To:** hi@mistyrecords.com
+
+**Preview:**
+```
+Dear Management Team,
+
+This is an automated notification regarding a HIGH priority business issue.
+
+Issue: Widespread Overstocking
+Severity: HIGH
+Category: Inventory
+
+Description:
+25 albums have stock levels exceeding 100 units with low sales velocity...
+
+Please review and take appropriate action.
+
+Best regards,
+Misty Jazz Records Business Intelligence System
+```
+
+✅ **Email ready to send!**
+```
+
+**Note:** After generating an email, it is stored in state and can be sent using `send_fix_emails()` or edited using `edit_email()`.
+
+---
+
 #### `edit_email`
 
 Edit a specific field of a generated email before sending.
@@ -938,6 +1018,8 @@ The recommended workflow for the Issues Agent:
          │
          ▼
 4. propose_fix_for_issue(issue_number)
+         │                    OR
+         ├──► generate_email_for_issue(N, type)  [On-demand email]
          │
          ├──► edit_email(N, field, value)  [Optional: modify]
          │
@@ -968,6 +1050,7 @@ from services.tools import (
     find_issue_by_keyword,
     # Fix tools
     propose_fix_for_issue,
+    generate_email_for_issue,  # On-demand email generation
     edit_email,
     send_fix_emails,
     # Utility tools

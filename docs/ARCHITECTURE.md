@@ -32,8 +32,8 @@ Misty AI Enterprise System is a Streamlit-based platform providing AI-powered bu
 │  │  RAG │ Marketing │ Email │ Auth Email │ Activity Log │ Config         │ │
 │  └────────────────────────────────────────────────────────────────────────┘ │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │                    FUNCTION TOOLS (23)                                 │ │
-│  │  Query Tools (11) │ Generation Tools (4) │ Issues Tools (8)           │ │
+│  │                    FUNCTION TOOLS (26)                                 │ │
+│  │  Query Tools (11) │ Generation Tools (4) │ Issues Tools (11)          │ │
 │  └────────────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -57,19 +57,28 @@ enterprise-ai-powered-sys/
 │   └── styles.py               # CSS theming
 ├── services/
 │   ├── config.py               # Centralized configuration
-│   ├── prompts/                # LLM prompt templates
+│   ├── prompts/                # LLM prompt templates (general agents)
 │   ├── schemas/                # Pydantic response validation
-│   ├── tools/                  # LangChain tool definitions
+│   ├── tools/                  # LangChain tool definitions (26 tools)
 │   │   ├── __init__.py         # Package exports
 │   │   ├── base.py             # BaseBusinessTools class
 │   │   ├── query_tools.py      # Read-only query tools (11 tools)
 │   │   ├── generation_tools.py # Content generation tools (4 tools)
-│   │   ├── issues_query_tools.py    # SQL generation for issues
-│   │   ├── issues_analysis_tools.py # Issue identification
-│   │   ├── issues_fix_tools.py      # Fix proposals & emails
-│   │   ├── issues_utility_tools.py  # State utilities
-│   │   └── issues_state.py          # Shared agentic state
-│   ├── tools_templates/        # Email/report templates
+│   │   ├── issues_query_tools.py    # SQL generation & execution (2 tools)
+│   │   ├── issues_analysis_tools.py # Issue identification (4 tools)
+│   │   ├── issues_fix_tools.py      # Fix proposals & emails (4 tools)
+│   │   ├── issues_utility_tools.py  # State utilities (2 tools)
+│   │   ├── issues_state.py          # Shared agentic state
+│   │   └── prompts/                 # Issues agent prompts
+│   │       ├── issues_stage0_sql_generation_prompt.txt
+│   │       ├── issues_stage1_analysis_prompt.txt
+│   │       └── issues_stage2_fixes_prompt.txt
+│   ├── tools_templates/        # Email/report templates (8 templates)
+│   │   ├── management_notification_template.txt
+│   │   ├── supplier_notification_template.txt
+│   │   ├── customer_notification_template.txt
+│   │   ├── team_notification_template.txt
+│   │   └── ... (4 more templates)
 │   ├── *_service.py            # Service implementations
 │   └── *_agent.py              # AI agent implementations
 ├── auth/
@@ -153,10 +162,52 @@ LangGraph provides state management and tool orchestration for this complex work
 
 **Components**:
 - `IssuesAgentState`: Shared state singleton across tool invocations
-- `issues_query_tools.py`: SQL generation and execution
-- `issues_analysis_tools.py`: Issue identification logic
-- `issues_fix_tools.py`: Fix proposals and email composition
-- `issues_utility_tools.py`: State reset and utilities
+- `issues_query_tools.py`: SQL generation and execution (2 tools)
+- `issues_analysis_tools.py`: Issue identification logic (4 tools)
+- `issues_fix_tools.py`: Fix proposals and email composition (4 tools)
+- `issues_utility_tools.py`: State reset and utilities (2 tools)
+- `tools/prompts/`: Issues-specific prompt templates
+
+### 3.4 Domain-Focused Analysis
+
+**Decision**: Implement domain filtering for focused business analysis.
+
+**Rationale**: Users often want to investigate specific business areas (inventory, payments, customers, revenue) rather than running comprehensive analysis. Domain filtering ensures:
+- SQL queries are generated only for the requested domain
+- Issue identification is limited to the focused area
+- Reports are concise and actionable
+
+**Implementation**:
+- Focus area detection from user intent
+- Domain-specific SQL generation (3-5 queries vs 5-10 for full analysis)
+- Category filtering in issue analysis
+- Configurable thresholds per domain
+
+### 3.5 Template-Based Email System
+
+**Decision**: Use file-based templates from `tools_templates/` for all email generation.
+
+**Rationale**: Email templates should be:
+- Easily editable without code changes
+- Consistent across the application
+- Testable independently of business logic
+
+**Implementation**:
+```python
+# In issues_fix_tools.py
+TEMPLATES_DIR = Path(__file__).parent.parent / "tools_templates"
+
+def _load_template(template_name: str) -> str:
+    filepath = TEMPLATES_DIR / template_name
+    return filepath.read_text() if filepath.exists() else None
+```
+
+**Template Types**:
+- Management notifications (business alerts)
+- Supplier notifications (inventory issues)
+- Customer notifications (order/service updates)
+- Team notifications (internal alerts)
+- Inventory alerts, restock recommendations, transaction records
 
 ### 4. Google Vertex AI / Gemini Models
 
@@ -277,10 +328,12 @@ else:
 | `tools/query_tools.py` | Read-only analytics (metrics, top products, payments) | 11 |
 | `tools/generation_tools.py` | Content generation (emails, recommendations, actions) | 4 |
 | `tools/issues_query_tools.py` | SQL generation and execution | 2 |
-| `tools/issues_analysis_tools.py` | Issue identification | 1 |
-| `tools/issues_fix_tools.py` | Fix proposals and email composition | 3 |
+| `tools/issues_analysis_tools.py` | Issue identification, details, search | 4 |
+| `tools/issues_fix_tools.py` | Fix proposals, email generation, sending | 4 |
 | `tools/issues_utility_tools.py` | State management | 2 |
 | `tools/base.py` | Shared initialization via ClientManager | - |
+| `tools/prompts/` | Issues agent prompt templates | - |
+| `tools_templates/` | Email and report templates | 8 |
 | `utils/clients.py` | Singleton Supabase/Analytics connections | - |
 
 ### Data Layer
@@ -343,15 +396,28 @@ File Upload → Supabase Storage Bucket → Public URL generation
             → Chunking → Embedding generation → Supabase vector store
 ```
 
-### Email Dispatch Flow
+### Email Dispatch Flow (Safety-Critical)
+
+**The agent can NEVER send emails to arbitrary addresses.** All emails are intercepted and routed to a safe destination:
 
 ```
-Email Request → EmailService.send_email()
-              → Route to DEFAULT_EXTERNAL_EMAIL (production)
-              → or PLACEBO_EMAIL (testing)
-              → Include original recipient in subject
-              → EmailJS API → Delivery
+Agent displays: hi@mistyrecords.com (hardcoded)
+         │
+         ▼
+EmailService.send_email() intercepts
+         │
+         ▼
+Actual delivery → carolinaleedev@gmail.com
+                  Subject: [To: hi@mistyrecords.com] Original Subject
 ```
+
+**Current Configuration:**
+- `PLACEBO_MODE = false` (production mode)
+- `DEFAULT_EXTERNAL_EMAIL = carolinaleedev@gmail.com`
+- Agent always displays `hi@mistyrecords.com` to users
+- All emails actually delivered to `carolinaleedev@gmail.com`
+
+The displayed recipient (hi@mistyrecords.com) is preserved in the email subject for tracking.
 
 ## Security Model
 
@@ -362,7 +428,7 @@ Email Request → EmailService.send_email()
 | Token Verification | SHA-256 hashed tokens with expiry |
 | Database Access | Row-level security policies |
 | Secrets Management | Streamlit secrets (production), .env (development) |
-| Email Safety | External routing to single address |
+| **Email Safety** | **All emails routed to single safe address (never arbitrary recipients)** |
 
 ## Configuration Management
 

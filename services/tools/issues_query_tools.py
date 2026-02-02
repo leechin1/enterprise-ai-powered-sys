@@ -58,7 +58,7 @@ def generate_business_queries(focus_areas: str = "all") -> str:
         response += f"{i}. {icon} **{q.get('purpose', 'Query')}** ({priority})\n"
         response += f"   _{q.get('explanation', '')}_\n\n"
 
-    response += f"\n**Next step:** Call `execute_business_queries()` to run these queries."
+    response += f"\n**Status:** Queries ready for execution."
 
     return response
 
@@ -75,7 +75,7 @@ def execute_business_queries() -> str:
     state = IssuesAgentState.get_instance()
 
     if not state.queries:
-        return "❌ No queries to execute. Call `generate_business_queries()` first."
+        return "❌ No queries to execute. Please generate queries first."
 
     base_agent = AIIssuesAgent()
     result = base_agent.execute_sql_queries(state.queries)
@@ -102,6 +102,6 @@ def execute_business_queries() -> str:
         purpose = r.get('purpose', 'Query')[:40]
         response += f"| {status} {r.get('query_id', '?')} | {purpose} | {row_count} |\n"
 
-    response += f"\n**Next step:** Call `analyze_issues_from_results()` to identify business issues and see full data dashboard."
+    response += f"\n**Status:** Query data ready for analysis."
 
     return response

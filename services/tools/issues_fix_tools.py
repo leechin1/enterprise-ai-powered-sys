@@ -1,8 +1,10 @@
 """
 Issues Agent Fix Tools
 Tools for proposing fixes, editing emails, and sending notifications.
+Uses templates from services/tools_templates/ for email generation.
 """
 
+from pathlib import Path
 from langchain.tools import tool
 from services.ai_issues_agent import AIIssuesAgent
 from .issues_state import IssuesAgentState
@@ -13,6 +15,50 @@ try:
     EMAIL_SERVICE_AVAILABLE = True
 except Exception:
     EMAIL_SERVICE_AVAILABLE = False
+
+# Path to templates directory
+TEMPLATES_DIR = Path(__file__).parent.parent / "tools_templates"
+
+
+def _load_template(template_name: str) -> str:
+    """Load a template file from tools_templates directory."""
+    try:
+        filepath = TEMPLATES_DIR / template_name
+        if filepath.exists():
+            return filepath.read_text()
+        return None
+    except Exception:
+        return None
+
+
+# HARDCODED: All emails go to hi@mistyrecords.com - this is the ONLY valid recipient
+# The EmailService will then route to placebo or production email based on mode
+DEFAULT_EMAIL_RECIPIENT = "hi@mistyrecords.com"
+
+# Email type configurations with template mappings
+# ALL types use the same hardcoded recipient for safety
+EMAIL_TYPE_CONFIG = {
+    "management": {
+        "template": "management_notification_template.txt",
+        "default_recipient": DEFAULT_EMAIL_RECIPIENT,
+        "subject_prefix": "[{severity}] Business Issue Alert: "
+    },
+    "supplier": {
+        "template": "supplier_notification_template.txt",
+        "default_recipient": DEFAULT_EMAIL_RECIPIENT,
+        "subject_prefix": "[Action Required] Inventory Issue: "
+    },
+    "customer": {
+        "template": "customer_notification_template.txt",
+        "default_recipient": DEFAULT_EMAIL_RECIPIENT,
+        "subject_prefix": "Update from Misty Jazz Records: "
+    },
+    "team": {
+        "template": "team_notification_template.txt",
+        "default_recipient": DEFAULT_EMAIL_RECIPIENT,
+        "subject_prefix": "[Internal] {severity} Priority: "
+    }
+}
 
 
 @tool
@@ -91,10 +137,7 @@ def propose_fix_for_issue(issue_number: int) -> str:
             response += f"```\n{email.get('body', 'No content')}\n```\n\n"
 
     response += "---\n"
-    response += "**Next steps:**\n"
-    response += "- Call `send_fix_emails()` to send the notification emails\n"
-    response += "- Call `edit_email(email_number, field, new_value)` to modify an email first\n"
-    response += "- Call `propose_fix_for_issue(N)` to see a different issue's fix"
+    response += "**Status:** Fix proposal ready. Emails can be sent upon approval."
 
     return response
 
@@ -115,7 +158,7 @@ def edit_email(email_number: int, field: str, new_value: str) -> str:
     state = IssuesAgentState.get_instance()
 
     if not state.proposed_fixes:
-        return "❌ No fix proposed. Call `propose_fix_for_issue(issue_number)` first."
+        return "❌ No fix or email has been proposed yet. Please propose a fix or generate an email for an issue first."
 
     fix = state.proposed_fixes[0]
     emails = fix.get('generated_emails', [])
@@ -148,10 +191,122 @@ def edit_email(email_number: int, field: str, new_value: str) -> str:
 
 
 @tool
+def generate_email_for_issue(issue_number: int, email_type: str = "management") -> str:
+    """
+    Generate an email on-demand for a specific issue using templates from tools_templates/.
+    Use this when no fix proposal exists or when you need a different type of email.
+
+    Args:
+        issue_number: The issue number (1-based) from the identified issues list.
+        email_type: Type of email to generate:
+                   - "management" - Notify management about the issue
+                   - "supplier" - Contact supplier about inventory/stock issues
+                   - "customer" - Notify customers about issues affecting them
+                   - "team" - Alert internal team members
+
+    Returns:
+        Generated email preview ready to send with send_fix_emails().
+    """
+    state = IssuesAgentState.get_instance()
+
+    if not state.issues:
+        return "❌ No issues identified. Run the analysis first."
+
+    idx = issue_number - 1
+    if idx < 0 or idx >= len(state.issues):
+        return f"❌ Invalid issue number. Choose between 1 and {len(state.issues)}."
+
+    issue = state.issues[idx]
+    severity = issue.get('severity', 'medium').upper()
+    category = issue.get('category', 'operations')
+    title = issue.get('title', 'Business Issue')
+    description = issue.get('description', 'No description available')
+
+    # Get email type configuration
+    email_type_lower = email_type.lower()
+    if email_type_lower not in EMAIL_TYPE_CONFIG:
+        email_type_lower = "management"
+
+    config = EMAIL_TYPE_CONFIG[email_type_lower]
+
+    # Load template from file
+    template_content = _load_template(config["template"])
+
+    if template_content:
+        # Format the template with issue data
+        try:
+            email_body = template_content.format(
+                recipient_email=config["default_recipient"],
+                severity=severity,
+                title=title,
+                category=category.title(),
+                description=description
+            )
+            # Extract just the body (between the header lines)
+            lines = email_body.split('\n')
+            body_lines = []
+            in_body = False
+            for line in lines:
+                if line.startswith('Dear') or line.startswith('Hi '):
+                    in_body = True
+                if in_body and not line.startswith('==='):
+                    body_lines.append(line)
+            email_body = '\n'.join(body_lines).strip()
+        except KeyError as e:
+            # Fallback if template has missing placeholders
+            email_body = f"Issue: {title}\nSeverity: {severity}\nCategory: {category}\n\n{description}"
+    else:
+        # Fallback inline template if file not found
+        email_body = f"""Dear Team,
+
+This is an automated notification regarding a business issue.
+
+**Issue:** {title}
+**Severity:** {severity}
+**Category:** {category.title()}
+
+**Description:**
+{description}
+
+Please review and take appropriate action.
+
+Best regards,
+Misty Jazz Records Business Intelligence System"""
+
+    # Build subject with severity if applicable
+    subject_prefix = config["subject_prefix"].format(severity=severity)
+    subject = f"{subject_prefix}{title}"
+
+    # Create email object
+    generated_email = {
+        "subject": subject,
+        "recipient_emails": [config["default_recipient"]],
+        "body": email_body
+    }
+
+    # Store in state for sending
+    if not state.proposed_fixes:
+        state.proposed_fixes = [{"generated_emails": [generated_email], "recipients": []}]
+    else:
+        if not state.proposed_fixes[0].get('generated_emails'):
+            state.proposed_fixes[0]['generated_emails'] = []
+        state.proposed_fixes[0]['generated_emails'].append(generated_email)
+
+    response = f"## 📧 Email Generated for Issue #{issue_number}\n\n"
+    response += f"**Type:** {email_type.title()} Notification\n"
+    response += f"**Subject:** {subject}\n"
+    response += f"**To:** {config['default_recipient']}\n\n"
+    response += f"**Preview:**\n```\n{email_body[:500]}{'...' if len(email_body) > 500 else ''}\n```\n\n"
+    response += "✅ **Email ready to send!**"
+
+    return response
+
+
+@tool
 def send_fix_emails() -> str:
     """
     Send all the notification emails for the currently proposed fix.
-    MUST call propose_fix_for_issue() first to generate the emails.
+    Call propose_fix_for_issue() or generate_email_for_issue() first to create emails.
 
     In placebo mode, all emails are sent to the configured test email address.
 
@@ -161,7 +316,7 @@ def send_fix_emails() -> str:
     state = IssuesAgentState.get_instance()
 
     if not state.proposed_fixes:
-        return "❌ No fix proposed. Call `propose_fix_for_issue(issue_number)` first."
+        return "❌ No fix or email has been proposed yet. Please propose a fix or generate an email for an issue first."
 
     fix = state.proposed_fixes[0]
     emails = fix.get('generated_emails', [])

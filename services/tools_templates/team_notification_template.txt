@@ -1,0 +1,23 @@
+TEAM NOTIFICATION
+=================
+
+To: {recipient_email}
+Subject: [Internal] {severity} Priority: {title}
+
+Hi Team,
+
+A new issue has been identified that needs our attention.
+
+**Issue:** {title}
+**Severity:** {severity}
+**Category:** {category}
+
+**Details:**
+{description}
+
+Please review and take appropriate action.
+
+Thanks,
+Business Intelligence System
+
+=================
