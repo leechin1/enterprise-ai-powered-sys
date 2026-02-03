@@ -12,6 +12,7 @@
 
 AI-powered enterprise automation platform for jazz vinyl retail operations.
 
+[![Deployment](https://img.shields.io/badge/Deployment-Live%20App-blue?style=for-the-badge&logo=streamlit)](https://misty-erp.streamlit.app/)
 ## Overview
 
 Misty AI Enterprise System is an internal operations platform for Misty Jazz Records. It consolidates business intelligence, customer relationship management, and AI-assisted workflows into a single interface. The system enables operations staff to monitor sales metrics, generate marketing content, query internal knowledge bases, and receive AI-driven business recommendations without requiring technical expertise.
