@@ -6,7 +6,7 @@ AI-powered enterprise automation platform for Misty Jazz Records
 import streamlit as st
 import os
 
-# --- 1. SECRETS INJECTION (MUST BE FIRST) ---
+# --- 1. SECRETS INJECTION ---
 # This allows your existing components to use os.getenv() successfully
 try:
     if len(st.secrets) > 0:
@@ -99,7 +99,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.caption("Version 1.0.0")
-    st.caption("© 2026 Misty Jazz Records")
+    st.caption("© 2026 bravedatum. All rights reserved.")
 
 # --- 6. ROUTING LOGIC ---
 if st.session_state.page == 'dashboard':

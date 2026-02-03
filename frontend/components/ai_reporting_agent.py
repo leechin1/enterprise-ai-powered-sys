@@ -241,46 +241,6 @@ def render_conversational_issues_interface():
         process_agentic_message(conv_agent, user_input)
         st.rerun()
 
-    # Sidebar with conversation controls and suggestions
-    with st.sidebar:
-        st.markdown("### 💬 Conversation Controls")
-
-        if st.button("🔄 Reset Conversation", use_container_width=True):
-            st.session_state.conv_messages = []
-            st.session_state.conv_tools_used = []
-            AIConversationalIssuesAgent.reset_state()
-            st.rerun()
-
-        if st.button("📊 Check Analysis Status", use_container_width=True):
-            process_agentic_message(conv_agent, "What's the current state of our analysis? If nothing has been analyzed yet, offer to start a full business analysis.")
-            st.rerun()
-
-        st.markdown("---")
-        st.markdown("### 💡 Quick Prompts")
-
-        quick_prompts = [
-            ("📦 Inventory Check", "Check for inventory and stock issues only"),
-            ("💳 Payment Issues", "Check for payment problems only"),
-            ("👥 Customer Reviews", "Check for customer satisfaction issues only"),
-            ("💰 Revenue Analysis", "Analyze sales and revenue trends only"),
-            ("🔍 Full Analysis", "Run a complete business analysis across all areas"),
-            ("🔧 Fix Issue #1", "Propose a fix for issue 1"),
-            ("📧 Send Emails", "Send the notification emails"),
-        ]
-
-        for label, prompt in quick_prompts:
-            if st.button(label, key=f"sidebar_{label}", use_container_width=True):
-                process_agentic_message(conv_agent, prompt)
-                st.rerun()
-
-        # Show tools used in this session
-        if st.session_state.conv_tools_used:
-            with st.expander("🔧 Tools Used This Session", expanded=False):
-                tool_counts = {}
-                for tool in st.session_state.conv_tools_used:
-                    tool_counts[tool] = tool_counts.get(tool, 0) + 1
-                for tool, count in sorted(tool_counts.items(), key=lambda x: -x[1]):
-                    st.markdown(f"- `{tool}`: {count}x")
 
 
 def process_agentic_message(conv_agent, user_input: str):

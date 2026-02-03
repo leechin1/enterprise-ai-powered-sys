@@ -15,10 +15,11 @@ from supabase import create_client, Client
 from google import genai
 from google.genai import types
 from langfuse import observe
+import fitz
 
 # PDF extraction support
 try:
-    import fitz  # PyMuPDF
+      
     PDF_SUPPORT = True
 except ImportError:
     PDF_SUPPORT = False
