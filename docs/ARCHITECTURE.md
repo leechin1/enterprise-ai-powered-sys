@@ -468,24 +468,3 @@ All configuration is centralized in `services/config.py`:
 | EmailJS | Email dispatch | Email features unavailable |
 | Langfuse | Observability | Monitoring only, no user impact |
 
-## Scalability Considerations
-
-- **Stateless Design**: Streamlit session state is per-user; horizontal scaling supported via Streamlit Cloud
-- **Database**: Supabase managed scaling; connection pooling handled by SDK
-- **Connection Management**: `ClientManager` singleton ensures single Supabase connection per process, reducing connection overhead
-- **LLM Calls**: Vertex AI rate limits apply; implement retry logic in production
-- **Embedding Storage**: Supabase pgvector scales with database tier
-
-## Development Modes
-
-**Placebo Mode**: EmailJS redirects all emails to `PLACEBO_EMAIL` when `PLACEBO_MODE=true`. Original recipient preserved in subject line for testing verification.
-
-**Production Mode**: All external emails route to `DEFAULT_EXTERNAL_EMAIL` (configurable). Intended recipient included in subject for tracking.
-
-## Future Considerations
-
-- Implement caching layer (Redis) for analytics queries
-- Add webhook support for real-time Supabase events
-- Consider async agent execution for long-running analyses
-- Evaluate migration to dedicated vector database if RAG corpus exceeds current tier limits
-- Add support for additional document formats (DOCX, HTML)
